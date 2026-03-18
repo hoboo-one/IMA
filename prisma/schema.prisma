@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ImageModel {
+  NANO_BANANA_2
+  NANO_BANANA_PRO
+}
+
+enum VideoModel {
+  VEO_3_1
+  VEO_3_1_FAST
+  VEO_3_1_LANDSCAPE
+  VEO_3_1_LANDSCAPE_FAST
+  SORA_2
+  SORA_2_PRO
+}
+
+enum JobKind {
+  GENERATE_SHOT_BATCH
+  REGENERATE_SHOT
+  GENERATE_VIDEO_VERSION
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum BatchStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum StoryboardStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum VideoStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum AssetOrigin {
+  ORIGINAL
+  PREVIEW
+  GENERATED_IMAGE
+  GENERATED_VIDEO
+}
+
+enum ActivityType {
+  LOGIN
+  CREATE_PROJECT
+  UPLOAD_ASSET
+  START_BATCH
+  CREATE_STORYBOARD
+  UPDATE_STORYBOARD
+  START_VIDEO
+  DOWNLOAD_ASSET
+  CREATE_MEMBER
+  TOGGLE_MEMBER
+}
+
+model UserProfile {
+  id          String        @id @db.Uuid
+  email       String        @unique
+  displayName String
+  role        UserRole
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  lastLoginAt DateTime?
+  projects     Project[]     @relation("ProjectOwner")
+  batches      ShotGenerationBatch[]
+  storyboards  StoryboardVersion[]
+  videos       VideoVersion[]
+  activities   ActivityLog[]
+
+  @@map("user_profiles")
+}
+
+model Project {
+  id                 String                @id @default(uuid()) @db.Uuid
+  name               String
+  productName        String
+  notes              String?
+  status             ProjectStatus         @default(ACTIVE)
+  createdById        String                @db.Uuid
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  lastActivityAt     DateTime              @default(now())
+  latestTaskSummary  String?
+  latestTaskStatus   JobStatus?
+  createdBy          UserProfile           @relation("ProjectOwner", fields: [createdById], references: [id])
+  assets             ProjectAsset[]
+  batches            ShotGenerationBatch[]
+  candidates         ShotCandidate[]
+  storyboards        StoryboardVersion[]
+  videos             VideoVersion[]
+  jobs               JobRun[]
+  activities         ActivityLog[]
+
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@map("projects")
+}
+
+model ProjectAsset {
+  id            String      @id @default(uuid()) @db.Uuid
+  projectId     String      @db.Uuid
+  origin        AssetOrigin
+  storagePath   String
+  previewPath   String?
+  mimeType      String
+  byteSize      Int
+  fileName      String
+  sortOrder     Int
+  expiresAt     DateTime
+  deletedAt     DateTime?
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder])
+  @@map("project_assets")
+}
+
+model ShotGenerationBatch {
+  id                     String         @id @default(uuid()) @db.Uuid
+  projectId              String         @db.Uuid
+  createdById            String         @db.Uuid
+  prompt                 String
+  targetCount            Int
+  model                  ImageModel
+  status                 BatchStatus    @default(QUEUED)
+  errorMessage           String?
+  expiresAt              DateTime
+  createdAt              DateTime       @default(now())
+  completedAt            DateTime?
+  createdBy              UserProfile    @relation(fields: [createdById], references: [id])
+  project                Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  candidates             ShotCandidate[]
+  jobs                   JobRun[]
+
+  @@index([projectId, createdAt])
+  @@map("shot_generation_batches")
+}
+
+model ShotCandidate {
+  id                String                @id @default(uuid()) @db.Uuid
+  batchId           String                @db.Uuid
+  projectId         String                @db.Uuid
+  sourceCandidateId String?               @db.Uuid
+  title             String
+  prompt            String
+  imagePath         String
+  previewPath       String?
+  byteSize          Int?
+  mimeType          String?
+  sortOrder         Int
+  createdAt         DateTime              @default(now())
+  expiresAt         DateTime
+  metadata          Json?
+  batch             ShotGenerationBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  project           Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceCandidate   ShotCandidate?        @relation("CandidateRevision", fields: [sourceCandidateId], references: [id])
+  revisions         ShotCandidate[]       @relation("CandidateRevision")
+  storyboardShots   StoryboardShot[]
+
+  @@index([projectId, createdAt])
+  @@map("shot_candidates")
+}
+
+model StoryboardVersion {
+  id                    String           @id @default(uuid()) @db.Uuid
+  projectId             String           @db.Uuid
+  createdById           String           @db.Uuid
+  name                  String
+  notes                 String?
+  status                StoryboardStatus @default(DRAFT)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  project               Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy             UserProfile      @relation(fields: [createdById], references: [id])
+  shots                 StoryboardShot[]
+  videos                VideoVersion[]
+
+  @@index([projectId, createdAt])
+  @@map("storyboard_versions")
+}
+
+model StoryboardShot {
+  id                  String             @id @default(uuid()) @db.Uuid
+  storyboardVersionId String             @db.Uuid
+  sourceCandidateId   String?            @db.Uuid
+  orderIndex          Int
+  title               String
+  description         String?
+  prompt              String
+  targetSeconds       Int
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  storyboardVersion   StoryboardVersion  @relation(fields: [storyboardVersionId], references: [id], onDelete: Cascade)
+  sourceCandidate     ShotCandidate?     @relation(fields: [sourceCandidateId], references: [id])
+  videoSegments       VideoSegment[]
+
+  @@unique([storyboardVersionId, orderIndex])
+  @@map("storyboard_shots")
+}
+
+model VideoVersion {
+  id                       String          @id @default(uuid()) @db.Uuid
+  projectId                String          @db.Uuid
+  storyboardVersionId      String          @db.Uuid
+  createdById              String          @db.Uuid
+  model                    VideoModel
+  targetSeconds            Int?
+  actualSeconds            Int?
+  status                   VideoStatus     @default(QUEUED)
+  errorMessage             String?
+  stitchedVideoPath        String?
+  stitchedPreviewImagePath String?
+  createdAt                DateTime        @default(now())
+  completedAt              DateTime?
+  expiresAt                DateTime
+  project                  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  storyboardVersion        StoryboardVersion @relation(fields: [storyboardVersionId], references: [id], onDelete: Cascade)
+  createdBy                UserProfile     @relation(fields: [createdById], references: [id])
+  segments                 VideoSegment[]
+  jobs                     JobRun[]
+
+  @@index([projectId, createdAt])
+  @@map("video_versions")
+}
+
+model VideoSegment {
+  id               String       @id @default(uuid()) @db.Uuid
+  videoVersionId   String       @db.Uuid
+  storyboardShotId String       @db.Uuid
+  orderIndex       Int
+  model            VideoModel
+  targetSeconds    Int
+  vendorTaskId     String?
+  vendorStatus     String?
+  prompt           String
+  segmentPath      String?
+  mimeType         String?
+  byteSize         Int?
+  errorMessage     String?
+  createdAt        DateTime     @default(now())
+  completedAt      DateTime?
+  expiresAt        DateTime
+  videoVersion     VideoVersion @relation(fields: [videoVersionId], references: [id], onDelete: Cascade)
+  storyboardShot   StoryboardShot @relation(fields: [storyboardShotId], references: [id], onDelete: Cascade)
+
+  @@unique([videoVersionId, orderIndex])
+  @@map("video_segments")
+}
+
+model JobRun {
+  id             String      @id @default(uuid()) @db.Uuid
+  projectId      String?     @db.Uuid
+  batchId        String?     @db.Uuid
+  videoVersionId String?     @db.Uuid
+  kind           JobKind
+  status         JobStatus   @default(QUEUED)
+  payload        Json
+  attempts       Int         @default(0)
+  maxAttempts    Int         @default(3)
+  errorMessage   String?
+  availableAt    DateTime    @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime    @default(now())
+  project        Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  batch          ShotGenerationBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  videoVersion   VideoVersion? @relation(fields: [videoVersionId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@map("job_runs")
+}
+
+model ActivityLog {
+  id          String       @id @default(uuid()) @db.Uuid
+  actorId     String       @db.Uuid
+  projectId   String?      @db.Uuid
+  type        ActivityType
+  summary     String
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  actor       UserProfile  @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("activity_logs")
+}
