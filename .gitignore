@@ -17,3 +17,5 @@ generated
 npm-debug.log*
 prisma/dev.db
 docs/**/*.tmp
+
+.vercel
