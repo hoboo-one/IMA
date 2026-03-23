@@ -22,6 +22,10 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
     .getAll("files")
     .filter((value): value is File => value instanceof File && value.size > 0);
 
+  if (files.length === 0) {
+    throw new Error("请先选择至少一张参考图再上传。");
+  }
+
   const project = await db.project.findUnique({
     where: { id: projectId },
     include: { assets: true }
@@ -81,6 +85,17 @@ export async function createShotBatchAction(formData: FormData) {
 
   if (!parsed.success) {
     throw new Error(parsed.error.flatten().formErrors.join("\n"));
+  }
+
+  const assetCount = await db.projectAsset.count({
+    where: {
+      projectId: parsed.data.projectId,
+      deletedAt: null
+    }
+  });
+
+  if (assetCount === 0) {
+    throw new Error("请先上传至少一张产品参考图，再生成候选镜头。");
   }
 
   const batch = await db.shotGenerationBatch.create({

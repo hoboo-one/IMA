@@ -80,13 +80,16 @@ export default async function ProjectWorkspacePage({
               <span className="meta-text">最多 3 张，单张 20MB</span>
             </CardHeader>
             <CardBody className="panel-block">
-              <form action={uploadReferenceAssetsAction} className="stack-form">
+              <form action={uploadReferenceAssetsAction} className="stack-form" encType="multipart/form-data">
                 <input type="hidden" name="projectId" value={project.id} />
                 <label className="field">
                   <span>上传产品参考图</span>
                   <input name="files" type="file" accept="image/*" multiple />
                 </label>
                 <Button type="submit">上传参考图</Button>
+                {project.assets.length === 0 ? (
+                  <div className="meta-text">请先上传至少一张参考图，再开始生成候选镜头。</div>
+                ) : null}
               </form>
 
               {project.assets.length === 0 ? (
@@ -148,6 +151,9 @@ export default async function ProjectWorkspacePage({
                   </label>
                 </div>
                 <Button type="submit">生成候选镜头</Button>
+                {project.assets.length === 0 ? (
+                  <div className="meta-text">请先上传至少一张参考图，再开始生成候选镜头。</div>
+                ) : null}
               </form>
 
               <div className="section-list">
