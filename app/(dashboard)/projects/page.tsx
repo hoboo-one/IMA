@@ -4,6 +4,7 @@ import { createProjectAction } from "@/app/(dashboard)/projects/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { getProjects } from "@/lib/projects";
 import { formatDateTime } from "@/lib/utils";
 
@@ -34,9 +35,11 @@ export default async function ProjectsPage({
               </label>
               <label className="field">
                 <span>补充说明</span>
-                <textarea name="notes" placeholder="补充产品定位、材质、希望强调的卖点" />
+                <textarea name="notes" placeholder="补充产品定位、材质、想强调的卖点或镜头风格" />
               </label>
-              <Button type="submit">创建并进入工作台</Button>
+              <SubmitButton type="submit" pendingText="创建中...">
+                创建并进入工作台
+              </SubmitButton>
             </form>
           </CardBody>
         </Card>
@@ -51,9 +54,9 @@ export default async function ProjectsPage({
                 <span>关键词</span>
                 <input className="search-input" name="q" defaultValue={params.q ?? ""} placeholder="按项目名或产品名搜索" />
               </label>
-              <Button type="submit" variant="ghost">
+              <SubmitButton type="submit" variant="ghost" pendingText="刷新中...">
                 更新列表
-              </Button>
+              </SubmitButton>
             </form>
           </CardBody>
         </Card>
@@ -79,11 +82,12 @@ export default async function ProjectsPage({
                       </Badge>
                     </div>
                     <div className="meta-text">
-                      产品：{project.productName} · 创建人：{project.createdBy.displayName} · 最近更新：{formatDateTime(project.updatedAt)}
+                      产品：{project.productName} · 创建人：{project.createdBy.displayName} · 最近更新：
+                      {formatDateTime(project.updatedAt)}
                     </div>
                   </div>
                   <Link href={`/projects/${project.id}`}>
-                    <Button>进入工作台</Button>
+                    <Button type="button">进入工作台</Button>
                   </Link>
                 </div>
               ))}

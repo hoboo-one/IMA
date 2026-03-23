@@ -1,22 +1,25 @@
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { clearAppSessionCookie, readAppSessionCookie } from "@/lib/session-cookie";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function getCurrentUser() {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getUser();
+  const storedSession = await readAppSessionCookie();
 
-  if (error || !data.user) {
+  if (!storedSession?.accessToken) {
     return null;
   }
 
-  return data.user;
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.auth.getUser(storedSession.accessToken);
+  return error || !data.user ? null : data.user;
 }
 
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) {
+    await clearAppSessionCookie().catch(() => undefined);
     redirect("/login");
   }
 
@@ -30,8 +33,7 @@ export async function requireActiveProfile() {
   });
 
   if (!profile || !profile.isActive) {
-    const supabase = await createSupabaseServerClient();
-    await supabase.auth.signOut();
+    await clearAppSessionCookie().catch(() => undefined);
     redirect("/login?error=inactive");
   }
 

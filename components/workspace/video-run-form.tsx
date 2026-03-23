@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { modelSupportsSeconds, soraSeconds, videoModelLabels, videoModels } from "@/shared";
 
 type VideoRunFormProps = {
@@ -43,7 +43,9 @@ export function VideoRunForm({ action, projectId, storyboardVersionId }: VideoRu
         </label>
       ) : null}
 
-      <Button type="submit">开始生成视频</Button>
+      <SubmitButton type="submit" pendingText="视频生成中...">
+        开始生成视频
+      </SubmitButton>
     </form>
   );
 }

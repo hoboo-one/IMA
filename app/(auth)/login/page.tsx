@@ -1,6 +1,12 @@
 import { loginAction } from "@/app/(auth)/login/actions";
-import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { SubmitButton } from "@/components/ui/submit-button";
+
+const errorMessages: Record<string, string> = {
+  auth: "登录失败，请检查邮箱和密码是否正确。",
+  inactive: "当前账号已停用，请联系管理员处理。",
+  invalid: "请填写完整且合法的登录信息。"
+};
 
 export default async function LoginPage({
   searchParams
@@ -8,6 +14,7 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const params = await searchParams;
+  const errorMessage = params.error ? errorMessages[params.error] ?? "登录失败，请稍后再试。" : null;
 
   return (
     <main className="login-shell">
@@ -28,10 +35,10 @@ export default async function LoginPage({
               <span>密码</span>
               <input name="password" type="password" placeholder="请输入密码" required />
             </label>
-            {params.error ? (
-              <div className="empty-state">登录失败，请确认账号状态和密码是否正确。</div>
-            ) : null}
-            <Button type="submit">进入工作台</Button>
+            {errorMessage ? <div className="empty-state">{errorMessage}</div> : null}
+            <SubmitButton type="submit" pendingText="登录中...">
+              进入工作台
+            </SubmitButton>
           </form>
         </CardBody>
       </Card>

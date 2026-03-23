@@ -12,6 +12,7 @@ import { TaskAutoRefresh } from "@/components/task-auto-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { VideoRunForm } from "@/components/workspace/video-run-form";
 import { getProjectWorkspace } from "@/lib/projects";
 import { bytesToLabel, formatDateTime } from "@/lib/utils";
@@ -52,10 +53,14 @@ export default async function ProjectWorkspacePage({
   }
 
   const { project, assetUrls, candidateUrls, videoUrls } = workspace;
+  const hasReferenceAssets = project.assets.length > 0;
+  const hasMaxReferenceAssets = project.assets.length >= 3;
+  const hasCandidatePool = project.batches.some((batch) => batch.candidates.length > 0);
+  const hasRunningJobs = project.jobs.length > 0;
 
   return (
     <div className="page-stack">
-      <TaskAutoRefresh enabled={project.jobs.length > 0} />
+      <TaskAutoRefresh enabled={hasRunningJobs} />
 
       <Card>
         <CardHeader>
@@ -72,28 +77,44 @@ export default async function ProjectWorkspacePage({
         </CardHeader>
       </Card>
 
+      {hasRunningJobs ? (
+        <div className="empty-state">任务进行中，页面会每 5 秒自动刷新一次。你可以留在当前页等待结果出现。</div>
+      ) : null}
+
       <div className="workspace-grid">
         <div className="page-stack">
           <Card>
             <CardHeader>
               <CardTitle>参考图输入</CardTitle>
-              <span className="meta-text">最多 3 张，单张 20MB</span>
+              <span className="meta-text">最多 3 张，单张不超过 20MB</span>
             </CardHeader>
             <CardBody className="panel-block">
-              <form action={uploadReferenceAssetsAction} className="stack-form" encType="multipart/form-data">
+              <form action={uploadReferenceAssetsAction} className="stack-form">
                 <input type="hidden" name="projectId" value={project.id} />
                 <label className="field">
                   <span>上传产品参考图</span>
-                  <input name="files" type="file" accept="image/*" multiple />
+                  <input
+                    name="files"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={hasMaxReferenceAssets}
+                    required={!hasReferenceAssets}
+                  />
                 </label>
-                <Button type="submit">上传参考图</Button>
-                {project.assets.length === 0 ? (
-                  <div className="meta-text">请先上传至少一张参考图，再开始生成候选镜头。</div>
+                <SubmitButton type="submit" pendingText="上传中..." disabled={hasMaxReferenceAssets}>
+                  {hasMaxReferenceAssets ? "已达到上限" : "上传参考图"}
+                </SubmitButton>
+                {!hasReferenceAssets ? (
+                  <div className="form-note">先上传至少 1 张参考图，再去生成候选镜头。</div>
+                ) : null}
+                {hasMaxReferenceAssets ? (
+                  <div className="form-note">当前项目已经有 3 张参考图。第一版暂不支持删除或替换，请直接继续生成。</div>
                 ) : null}
               </form>
 
-              {project.assets.length === 0 ? (
-                <div className="empty-state">先上传产品正面、背面或侧面图，后续模型会基于这些轮廓生成镜头。</div>
+              {!hasReferenceAssets ? (
+                <div className="empty-state">先上传产品正面、背面或侧面图，后续模型会基于这些轮廓生成候选镜头。</div>
               ) : (
                 <div className="gallery-grid">
                   {project.assets.map((asset) => {
@@ -124,14 +145,15 @@ export default async function ProjectWorkspacePage({
                   <span>生成提示词</span>
                   <textarea
                     name="prompt"
-                    placeholder="例如：强调金属杯身反光、干净桌面场景、从材质细节到整体轮廓的产品分镜候选"
+                    disabled={!hasReferenceAssets}
+                    placeholder="例如：突出金属反光、简洁背景、从材质细节到整体轮廓的产品候选镜头。"
                     required
                   />
                 </label>
                 <div className="card-grid">
                   <label className="field">
                     <span>候选数量</span>
-                    <select name="targetCount" defaultValue="4">
+                    <select name="targetCount" defaultValue="4" disabled={!hasReferenceAssets}>
                       {[2, 4, 6, 8, 10, 12].map((count) => (
                         <option key={count} value={count}>
                           {count} 张
@@ -141,7 +163,7 @@ export default async function ProjectWorkspacePage({
                   </label>
                   <label className="field">
                     <span>图片模型</span>
-                    <select name="model" defaultValue="NANO_BANANA_2">
+                    <select name="model" defaultValue="NANO_BANANA_2" disabled={!hasReferenceAssets}>
                       {Object.entries(imageModelLabels).map(([value, label]) => (
                         <option key={value} value={value}>
                           {label}
@@ -150,15 +172,19 @@ export default async function ProjectWorkspacePage({
                     </select>
                   </label>
                 </div>
-                <Button type="submit">生成候选镜头</Button>
-                {project.assets.length === 0 ? (
-                  <div className="meta-text">请先上传至少一张参考图，再开始生成候选镜头。</div>
-                ) : null}
+                <SubmitButton type="submit" pendingText="提交生成中..." disabled={!hasReferenceAssets}>
+                  生成候选镜头
+                </SubmitButton>
+                {!hasReferenceAssets ? (
+                  <div className="form-note">没有参考图时无法生成候选镜头。</div>
+                ) : (
+                  <div className="form-note">提交后任务会进入异步队列，页面会在处理中自动刷新。</div>
+                )}
               </form>
 
               <div className="section-list">
                 {project.batches.length === 0 ? (
-                  <div className="empty-state">还没有候选镜头批次。输入本轮目标和风格后即可开始生成。</div>
+                  <div className="empty-state">还没有候选镜头批次。输入镜头目标和风格后即可开始生成。</div>
                 ) : (
                   project.batches.map((batch) => (
                     <div key={batch.id} className="panel-block">
@@ -179,6 +205,7 @@ export default async function ProjectWorkspacePage({
                           目标 {batch.targetCount} 张 · {formatDateTime(batch.createdAt)}
                         </span>
                       </div>
+                      {batch.errorMessage ? <div className="form-note">失败原因：{batch.errorMessage}</div> : null}
                       <div className="gallery-grid">
                         {batch.candidates.map((candidate) => {
                           const urls = candidateUrls.find((item) => item.id === candidate.id);
@@ -209,11 +236,11 @@ export default async function ProjectWorkspacePage({
                 <input type="hidden" name="projectId" value={project.id} />
                 <label className="field">
                   <span>版本名称</span>
-                  <input name="name" placeholder="例如：第一版主镜头结构" required />
+                  <input name="name" placeholder="例如：第一版主镜头结构" required disabled={!hasCandidatePool} />
                 </label>
                 <label className="field">
                   <span>版本备注</span>
-                  <textarea name="notes" placeholder="记录这版分镜强调的卖点、场景或镜头逻辑" />
+                  <textarea name="notes" placeholder="记录这一版分镜强调的卖点、场景或镜头逻辑" disabled={!hasCandidatePool} />
                 </label>
                 <div className="checkbox-grid">
                   {project.batches.flatMap((batch) =>
@@ -223,7 +250,7 @@ export default async function ProjectWorkspacePage({
                         <div key={candidate.id} className="checkbox-card">
                           {urls?.previewUrl ? <PreviewImage src={urls.previewUrl} alt={candidate.title} /> : <div className="video-preview" />}
                           <label>
-                            <input type="checkbox" name="candidateIds" value={candidate.id} />
+                            <input type="checkbox" name="candidateIds" value={candidate.id} disabled={!hasCandidatePool} />
                             <span>
                               <strong>{candidate.title}</strong>
                               <br />
@@ -235,7 +262,12 @@ export default async function ProjectWorkspacePage({
                     })
                   )}
                 </div>
-                <Button type="submit">从候选中创建正式分镜</Button>
+                <SubmitButton type="submit" pendingText="创建中..." disabled={!hasCandidatePool}>
+                  从候选中创建正式分镜
+                </SubmitButton>
+                {!hasCandidatePool ? (
+                  <div className="form-note">候选镜头生成完成后，才能挑选并创建正式分镜。</div>
+                ) : null}
               </form>
 
               {project.storyboards.length === 0 ? (
@@ -246,7 +278,7 @@ export default async function ProjectWorkspacePage({
                     <CardHeader>
                       <div>
                         <CardTitle>{storyboard.name}</CardTitle>
-                        <p className="meta-text">{storyboard.notes ?? "无备注"}</p>
+                        <p className="meta-text">{storyboard.notes ?? "暂无备注"}</p>
                       </div>
                       <span className="meta-text">{formatDateTime(storyboard.createdAt)}</span>
                     </CardHeader>
@@ -276,9 +308,9 @@ export default async function ProjectWorkspacePage({
                             <span>单镜头提示词</span>
                             <textarea name="prompt" defaultValue={shot.prompt} />
                           </label>
-                          <Button type="submit" variant="ghost">
+                          <SubmitButton type="submit" variant="ghost" pendingText="保存中...">
                             保存镜头设置
-                          </Button>
+                          </SubmitButton>
                         </form>
                       ))}
                       <VideoRunForm

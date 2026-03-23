@@ -159,6 +159,11 @@ textarea {
   transition: 160ms ease;
 }
 
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .button-primary {
   background: var(--accent);
   color: white;
@@ -320,6 +325,12 @@ textarea {
   border: 1px dashed var(--border-strong);
   color: var(--muted);
   background: rgba(255, 255, 255, 0.5);
+}
+
+.form-note {
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 @media (max-width: 1080px) {

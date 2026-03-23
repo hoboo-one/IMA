@@ -23,7 +23,7 @@ export function AppShell({ children, currentPath, userName, roleLabel }: AppShel
         <div className="sidebar-brand">
           <p className="eyebrow">Internal Studio</p>
           <h1>Product Storyboard</h1>
-          <p className="sidebar-copy">多图输入、分镜筛选、视频拼接的一体化内部工作台。</p>
+          <p className="sidebar-copy">多图参考、分镜筛选、视频拼接的一体化内部工作台。</p>
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
