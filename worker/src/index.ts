@@ -8,34 +8,29 @@ import { stitchVideoSegments } from "./media.js";
 import { downloadStorageObject, removeStorageObjects, uploadStorageObject } from "./supabase.js";
 
 async function claimNextJob(workerId: string) {
-  return workerDb.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+  const rows = await workerDb.$queryRaw<JobRun[]>`
+    WITH next_job AS (
       SELECT id
       FROM job_runs
       WHERE status = 'QUEUED'
         AND "availableAt" <= NOW()
       ORDER BY "createdAt" ASC
-      FOR UPDATE SKIP LOCKED
       LIMIT 1
-    `;
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE job_runs AS job
+    SET
+      status = 'RUNNING',
+      "lockedAt" = NOW(),
+      "lockedBy" = ${workerId},
+      "startedAt" = NOW(),
+      attempts = job.attempts + 1
+    FROM next_job
+    WHERE job.id = next_job.id
+    RETURNING job.*
+  `;
 
-    if (rows.length === 0) {
-      return null;
-    }
-
-    return tx.jobRun.update({
-      where: { id: rows[0].id },
-      data: {
-        status: "RUNNING",
-        lockedAt: new Date(),
-        lockedBy: workerId,
-        startedAt: new Date(),
-        attempts: {
-          increment: 1
-        }
-      }
-    });
-  });
+  return rows[0] ?? null;
 }
 
 async function finishJob(jobId: string) {
