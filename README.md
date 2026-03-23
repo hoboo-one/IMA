@@ -24,5 +24,5 @@ Internal web workspace for turning product reference images into storyboard cand
 - Assets and generated files are designed for 24-hour retention. The worker runs periodic cleanup.
 - This repository is prepared for GitHub-driven deploys:
   - Connect the repo root to `Vercel` for the web app.
-  - Connect the repo root to `Railway` using the root `Dockerfile` for the worker service.
+  - Connect the repo root to `Railway` using the root `Dockerfile` for the worker service service.
 
