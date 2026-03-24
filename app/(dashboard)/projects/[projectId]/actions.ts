@@ -23,7 +23,7 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
     .filter((value): value is File => value instanceof File && value.size > 0);
 
   if (files.length === 0) {
-    throw new Error("请先选择至少一张参考图再上传。");
+    throw new Error("请先选择至少一张参考图。");
   }
 
   const project = await db.project.findUnique({
@@ -32,20 +32,20 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
   });
 
   if (!project) {
-    throw new Error("项目不存在");
+    throw new Error("项目不存在。");
   }
 
   if (project.assets.length + files.length > 3) {
-    throw new Error("参考图总数最多 3 张");
+    throw new Error("参考图总数最多只能上传 3 张。");
   }
 
   for (const [index, file] of files.entries()) {
     if (!file.type.startsWith("image/")) {
-      throw new Error("仅支持图片文件");
+      throw new Error("目前只支持图片文件。");
     }
 
     if (file.size > 20 * 1024 * 1024) {
-      throw new Error("单张图片上限为 20MB");
+      throw new Error("单张图片大小不能超过 20MB。");
     }
 
     await uploadProjectReferenceAsset({
@@ -95,7 +95,7 @@ export async function createShotBatchAction(formData: FormData) {
   });
 
   if (assetCount === 0) {
-    throw new Error("请先上传至少一张产品参考图，再生成候选镜头。");
+    throw new Error("请先上传至少一张产品参考图，再开始生成候选镜头。");
   }
 
   const batch = await db.shotGenerationBatch.create({
@@ -131,7 +131,7 @@ export async function createShotBatchAction(formData: FormData) {
     actorId: profile.id,
     projectId: parsed.data.projectId,
     type: "START_BATCH",
-    summary: `发起候选镜头生成（${parsed.data.targetCount} 张）`,
+    summary: `提交候选镜头生成（${parsed.data.targetCount} 张）`,
     metadata: {
       model: parsed.data.model
     }
@@ -259,7 +259,7 @@ export async function createVideoVersionAction(formData: FormData) {
   });
 
   if (!storyboard) {
-    throw new Error("正式分镜不存在");
+    throw new Error("正式分镜不存在。");
   }
 
   const totalSeconds = storyboard.shots.reduce((sum, shot) => sum + shot.targetSeconds, 0);
@@ -309,7 +309,7 @@ export async function createVideoVersionAction(formData: FormData) {
     actorId: profile.id,
     projectId: parsed.data.projectId,
     type: "START_VIDEO",
-    summary: "发起视频版本生成",
+    summary: "提交视频版本生成",
     metadata: {
       model: parsed.data.model,
       rawSeconds: parsed.data.seconds ?? null

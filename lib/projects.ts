@@ -121,8 +121,8 @@ export async function getProjectWorkspace(projectId: string) {
   const videoUrls = await Promise.all(
     project.videos.map(async (video) => ({
       id: video.id,
-      url: await signStoragePath(env.STORAGE_BUCKET_VIDEO, video.stitchedVideoPath),
-      previewUrl: await signStoragePath(env.STORAGE_BUCKET_VIDEO, video.stitchedPreviewImagePath)
+      previewUrl: await signStoragePath(env.STORAGE_BUCKET_VIDEO, video.stitchedPreviewImagePath),
+      downloadHref: video.stitchedVideoPath ? `/api/videos/${video.id}/download` : null
     }))
   );
 

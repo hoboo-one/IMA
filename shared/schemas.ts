@@ -54,7 +54,7 @@ export const createVideoVersionSchema = z.object({
       .int()
       .optional()
       .refine((value) => value === undefined || soraSeconds.includes(value as (typeof soraSeconds)[number]), {
-        message: "Sora 2 仅支持 10 秒或 15 秒"
+        message: "Sora 2 目前只支持 10 秒或 15 秒。"
       })
   )
 });

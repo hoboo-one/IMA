@@ -14,7 +14,7 @@ export const soraSeconds = [10, 15] as const;
 export const defaultAssetRetentionHours = 24;
 
 export const imageModelLabels: Record<(typeof imageModels)[number], string> = {
-  NANO_BANANA_2: "Nano Banana2",
+  NANO_BANANA_2: "Nano Banana 2",
   NANO_BANANA_PRO: "Nano Banana Pro"
 };
 
@@ -32,4 +32,3 @@ export const jobKinds = ["GENERATE_SHOT_BATCH", "REGENERATE_SHOT", "GENERATE_VID
 export function modelSupportsSeconds(model: (typeof videoModels)[number]) {
   return soraCapableModels.includes(model as (typeof soraCapableModels)[number]);
 }
-

@@ -26,6 +26,27 @@ export async function requireUser() {
   return user;
 }
 
+export async function getActiveProfileOrNull() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return null;
+  }
+
+  const profile = await db.userProfile.findUnique({
+    where: { id: user.id }
+  });
+
+  if (!profile || !profile.isActive) {
+    await clearAppSessionCookie().catch(() => undefined);
+    return null;
+  }
+
+  return {
+    user,
+    profile
+  };
+}
+
 export async function requireActiveProfile() {
   const user = await requireUser();
   const profile = await db.userProfile.findUnique({

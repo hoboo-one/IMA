@@ -19,6 +19,7 @@ export function VideoRunForm({ action, projectId, storyboardVersionId }: VideoRu
     <form action={action} className="stack-form">
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="storyboardVersionId" value={storyboardVersionId} />
+
       <label className="field">
         <span>视频模型</span>
         <select name="model" value={model} onChange={(event) => setModel(event.target.value as (typeof videoModels)[number])}>
@@ -32,7 +33,7 @@ export function VideoRunForm({ action, projectId, storyboardVersionId }: VideoRu
 
       {supportsSeconds ? (
         <label className="field">
-          <span>Sora 原始生成秒数</span>
+          <span>Sora 原始生成时长</span>
           <select name="seconds" defaultValue={String(soraSeconds[0])}>
             {soraSeconds.map((seconds) => (
               <option key={seconds} value={seconds}>

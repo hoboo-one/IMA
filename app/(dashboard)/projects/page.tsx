@@ -35,7 +35,7 @@ export default async function ProjectsPage({
               </label>
               <label className="field">
                 <span>补充说明</span>
-                <textarea name="notes" placeholder="补充产品定位、材质、想强调的卖点或镜头风格" />
+                <textarea name="notes" placeholder="写下产品定位、卖点、希望强调的场景或镜头风格。" />
               </label>
               <SubmitButton type="submit" pendingText="创建中...">
                 创建并进入工作台
@@ -46,7 +46,7 @@ export default async function ProjectsPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>项目搜索</CardTitle>
+            <CardTitle>搜索项目</CardTitle>
           </CardHeader>
           <CardBody>
             <form className="stack-form">
