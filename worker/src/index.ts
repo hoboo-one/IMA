@@ -1,4 +1,10 @@
-import { type JobRun, type ProjectAsset, type ShotCandidate, type StoryboardShot, type VideoSegment } from "@prisma/client";
+import {
+  type JobRun,
+  type ProjectAsset,
+  type ShotCandidate,
+  type StoryboardShot,
+  type VideoSegment
+} from "@prisma/client";
 
 import { workerDb } from "./db.js";
 import { workerEnv } from "./env.js";
@@ -117,16 +123,60 @@ async function getReferenceImages(projectId: string) {
   return references;
 }
 
+async function createStoryboardFromBatch(batch: {
+  id: string;
+  projectId: string;
+  createdById: string;
+  model: string;
+  targetCount: number;
+}, createdCandidates: ShotCandidate[]) {
+  const existingCount = await workerDb.storyboardVersion.count({
+    where: {
+      projectId: batch.projectId
+    }
+  });
+
+  const storyboard = await workerDb.storyboardVersion.create({
+    data: {
+      projectId: batch.projectId,
+      createdById: batch.createdById,
+      name: `自动分镜 ${existingCount + 1}`,
+      notes: `${batch.targetCount} 张分镜 · ${batch.model}`,
+      status: "ACTIVE",
+      shots: {
+        create: createdCandidates.map((candidate, index) => ({
+          sourceCandidateId: candidate.id,
+          orderIndex: index,
+          title: candidate.title,
+          prompt: candidate.prompt,
+          targetSeconds: 2,
+          description: null
+        }))
+      }
+    }
+  });
+
+  await workerDb.activityLog.create({
+    data: {
+      actorId: batch.createdById,
+      projectId: batch.projectId,
+      type: "CREATE_STORYBOARD",
+      summary: `系统生成分镜版本 ${storyboard.name}`,
+      metadata: {
+        batchId: batch.id,
+        model: batch.model
+      }
+    }
+  });
+}
+
 async function handleGenerateShotBatch(job: JobRun) {
   if (!job.batchId) {
     throw new Error("Missing batch id");
   }
 
   const batch = await workerDb.shotGenerationBatch.findUnique({
-    where: { id: job.batchId },
-    include: {
-      project: true
-    }
+    where: { id: job.batchId }
   });
 
   if (!batch) {
@@ -153,6 +203,8 @@ async function handleGenerateShotBatch(job: JobRun) {
     referenceImages: references
   });
 
+  const createdCandidates: ShotCandidate[] = [];
+
   for (const [index, generated] of generatedImages.entries()) {
     const imagePath = `${batch.projectId}/candidates/${batch.id}/candidate-${index + 1}.png`;
     await uploadStorageObject({
@@ -162,11 +214,11 @@ async function handleGenerateShotBatch(job: JobRun) {
       contentType: generated.mimeType
     });
 
-    await workerDb.shotCandidate.create({
+    const candidate = await workerDb.shotCandidate.create({
       data: {
         batchId: batch.id,
         projectId: batch.projectId,
-        title: `候选镜头 ${index + 1}`,
+        title: `分镜 ${index + 1}`,
         prompt: batch.prompt,
         imagePath,
         previewPath: imagePath,
@@ -176,7 +228,11 @@ async function handleGenerateShotBatch(job: JobRun) {
         expiresAt: batch.expiresAt
       }
     });
+
+    createdCandidates.push(candidate);
   }
+
+  await createStoryboardFromBatch(batch, createdCandidates);
 
   await workerDb.shotGenerationBatch.update({
     where: { id: batch.id },
@@ -189,14 +245,17 @@ async function handleGenerateShotBatch(job: JobRun) {
   await workerDb.project.update({
     where: { id: batch.projectId },
     data: {
-      latestTaskSummary: "候选镜头已就绪",
+      latestTaskSummary: "分镜图已就绪",
       latestTaskStatus: "SUCCEEDED",
       lastActivityAt: new Date()
     }
   });
 }
 
-async function resolveSegmentReferences(segment: VideoSegment & { storyboardShot: StoryboardShot & { sourceCandidate: ShotCandidate | null } }, projectAssets: ProjectAsset[]) {
+async function resolveSegmentReferences(
+  segment: VideoSegment & { storyboardShot: StoryboardShot & { sourceCandidate: ShotCandidate | null } },
+  projectAssets: ProjectAsset[]
+) {
   const references = [];
 
   if (segment.storyboardShot.sourceCandidate) {

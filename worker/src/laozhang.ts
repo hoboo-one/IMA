@@ -89,7 +89,7 @@ export async function generateCandidateImages(input: {
           content: [
             {
               type: "text",
-              text: `${input.prompt}\n\n请输出第 ${index + 1} 张镜头候选图，与其他候选保持明显构图差异。`
+              text: `${input.prompt}\n\n请输出第 ${index + 1} 张分镜图，并与其他图片保持明显的构图差异。`
             },
             ...input.referenceImages.map((image) => ({
               type: "image_url",

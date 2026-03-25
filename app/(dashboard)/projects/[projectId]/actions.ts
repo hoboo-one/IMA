@@ -41,7 +41,7 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
 
   for (const [index, file] of files.entries()) {
     if (!file.type.startsWith("image/")) {
-      throw new Error("目前只支持图片文件。");
+      throw new Error("目前只支持上传图片文件。");
     }
 
     if (file.size > 20 * 1024 * 1024) {
@@ -59,7 +59,8 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
     where: { id: projectId },
     data: {
       lastActivityAt: new Date(),
-      latestTaskSummary: "参考图已更新"
+      latestTaskSummary: "参考图已更新",
+      latestTaskStatus: "SUCCEEDED"
     }
   });
 
@@ -95,7 +96,7 @@ export async function createShotBatchAction(formData: FormData) {
   });
 
   if (assetCount === 0) {
-    throw new Error("请先上传至少一张产品参考图，再开始生成候选镜头。");
+    throw new Error("请先上传至少一张产品参考图，再开始生成分镜图。");
   }
 
   const batch = await db.shotGenerationBatch.create({
@@ -121,7 +122,7 @@ export async function createShotBatchAction(formData: FormData) {
   await db.project.update({
     where: { id: parsed.data.projectId },
     data: {
-      latestTaskSummary: "候选镜头生成中",
+      latestTaskSummary: "分镜图生成中",
       latestTaskStatus: "QUEUED",
       lastActivityAt: new Date()
     }
@@ -131,7 +132,7 @@ export async function createShotBatchAction(formData: FormData) {
     actorId: profile.id,
     projectId: parsed.data.projectId,
     type: "START_BATCH",
-    summary: `提交候选镜头生成（${parsed.data.targetCount} 张）`,
+    summary: `提交分镜图生成（${parsed.data.targetCount} 张）`,
     metadata: {
       model: parsed.data.model
     }
@@ -190,7 +191,7 @@ export async function createStoryboardVersionAction(formData: FormData) {
     actorId: profile.id,
     projectId: parsed.data.projectId,
     type: "CREATE_STORYBOARD",
-    summary: `创建正式分镜版本 ${parsed.data.name}`
+    summary: `创建分镜版本 ${parsed.data.name}`
   });
 
   revalidatePath(`/projects/${parsed.data.projectId}`);
@@ -259,7 +260,7 @@ export async function createVideoVersionAction(formData: FormData) {
   });
 
   if (!storyboard) {
-    throw new Error("正式分镜不存在。");
+    throw new Error("分镜版本不存在。");
   }
 
   const totalSeconds = storyboard.shots.reduce((sum, shot) => sum + shot.targetSeconds, 0);

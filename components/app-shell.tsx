@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 type AppShellProps = {
   children: ReactNode;
+  compact?: boolean;
   currentPath: string;
   userName: string;
   roleLabel: string;
@@ -16,10 +17,10 @@ const navItems = [
   { href: "/admin/members", label: "成员", hint: "People" }
 ];
 
-export function AppShell({ children, currentPath, userName, roleLabel }: AppShellProps) {
+export function AppShell({ children, compact = false, currentPath, userName, roleLabel }: AppShellProps) {
   return (
-    <div className="shell">
-      <aside className="sidebar">
+    <div className={cn("shell", compact && "shell-compact")}>
+      <aside className={cn("sidebar", compact && "sidebar-compact")}>
         <div className="sidebar-brand">
           <div className="traffic-lights" aria-hidden="true">
             <span />
@@ -29,7 +30,7 @@ export function AppShell({ children, currentPath, userName, roleLabel }: AppShel
           <div>
             <p className="eyebrow">Internal Studio</p>
             <h1>Product Storyboard</h1>
-            <p className="sidebar-copy">多图参考、分镜挑选、视频拼接的一体化工作台。</p>
+            {!compact ? <p className="sidebar-copy">多图参考、分镜挑选、视频拼接的一体化工作台。</p> : null}
           </div>
         </div>
 
@@ -38,7 +39,11 @@ export function AppShell({ children, currentPath, userName, roleLabel }: AppShel
             <Link
               key={item.href}
               href={item.href}
-              className={cn("sidebar-link", currentPath.startsWith(item.href) && "sidebar-link-active")}
+              className={cn(
+                "sidebar-link",
+                compact && "sidebar-link-compact",
+                currentPath.startsWith(item.href) && "sidebar-link-active"
+              )}
             >
               <strong>{item.label}</strong>
               <span>{item.hint}</span>

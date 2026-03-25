@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { SubmitButton } from "@/components/ui/submit-button";
 import { modelSupportsSeconds, soraSeconds, videoModelLabels, videoModels } from "@/shared";
@@ -13,7 +13,7 @@ type VideoRunFormProps = {
 
 export function VideoRunForm({ action, projectId, storyboardVersionId }: VideoRunFormProps) {
   const [model, setModel] = useState<(typeof videoModels)[number]>("VEO_3_1");
-  const supportsSeconds = useMemo(() => modelSupportsSeconds(model), [model]);
+  const supportsSeconds = modelSupportsSeconds(model);
 
   return (
     <form action={action} className="stack-form">
