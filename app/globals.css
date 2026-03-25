@@ -845,6 +845,10 @@ img {
   position: relative;
 }
 
+.smart-visual-link {
+  display: block;
+}
+
 .smart-media-visual img,
 .smart-shot-visual img,
 .smart-video-visual img,
@@ -855,6 +859,17 @@ img {
   width: 100%;
   height: 260px;
   object-fit: cover;
+  background: linear-gradient(180deg, rgba(234, 239, 247, 0.84), rgba(220, 226, 238, 0.76));
+}
+
+.smart-expired-preview {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+  line-height: 1.6;
   background: linear-gradient(180deg, rgba(234, 239, 247, 0.84), rgba(220, 226, 238, 0.76));
 }
 
