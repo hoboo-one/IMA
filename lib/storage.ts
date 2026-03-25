@@ -34,12 +34,10 @@ export async function uploadProjectReferenceAsset(input: {
       .toBuffer();
     previewPath = `${input.projectId}/preview/${Date.now()}-${safeName}.webp`;
 
-    const previewUpload = await admin.storage
-      .from(env.STORAGE_BUCKET_RAW)
-      .upload(previewPath, previewBuffer, {
-        contentType: "image/webp",
-        upsert: false
-      });
+    const previewUpload = await admin.storage.from(env.STORAGE_BUCKET_RAW).upload(previewPath, previewBuffer, {
+      contentType: "image/webp",
+      upsert: false
+    });
 
     if (previewUpload.error) {
       previewPath = undefined;
@@ -61,6 +59,59 @@ export async function uploadProjectReferenceAsset(input: {
       expiresAt: new Date(Date.now() + env.ASSET_RETENTION_HOURS * 60 * 60 * 1000)
     }
   });
+}
+
+export async function deleteProjectReferenceAsset(assetId: string) {
+  const env = getServerEnv();
+  const admin = createSupabaseAdminClient();
+
+  const asset = await db.projectAsset.findUnique({
+    where: { id: assetId }
+  });
+
+  if (!asset || asset.deletedAt) {
+    throw new Error("参考图不存在。");
+  }
+
+  const paths = [asset.storagePath, asset.previewPath].filter(Boolean) as string[];
+  if (paths.length > 0) {
+    const { error } = await admin.storage.from(env.STORAGE_BUCKET_RAW).remove(paths);
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.projectAsset.update({
+      where: { id: assetId },
+      data: {
+        deletedAt: new Date()
+      }
+    });
+
+    const remainingAssets = await tx.projectAsset.findMany({
+      where: {
+        projectId: asset.projectId,
+        deletedAt: null
+      },
+      orderBy: {
+        sortOrder: "asc"
+      }
+    });
+
+    await Promise.all(
+      remainingAssets.map((item, index) =>
+        tx.projectAsset.update({
+          where: { id: item.id },
+          data: {
+            sortOrder: index
+          }
+        })
+      )
+    );
+  });
+
+  return asset;
 }
 
 export async function signStoragePath(bucket: string, path?: string | null) {

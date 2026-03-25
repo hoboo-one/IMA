@@ -2,18 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 
-import {
-  createBatchSchema,
-  createStoryboardSchema,
-  createVideoVersionSchema,
-  updateStoryboardShotSchema
-} from "@/shared";
+import { createBatchSchema, createVideoVersionSchema, updateStoryboardShotSchema } from "@/shared";
 import { logActivity } from "@/lib/activity";
 import { requireActiveProfile } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getServerEnv } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs";
-import { uploadProjectReferenceAsset } from "@/lib/storage";
+import { deleteProjectReferenceAsset, uploadProjectReferenceAsset } from "@/lib/storage";
 
 export async function uploadReferenceAssetsAction(formData: FormData) {
   const { profile } = await requireActiveProfile();
@@ -28,7 +23,7 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
 
   const project = await db.project.findUnique({
     where: { id: projectId },
-    include: { assets: true }
+    include: { assets: { where: { deletedAt: null } } }
   });
 
   if (!project) {
@@ -74,6 +69,31 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
   revalidatePath(`/projects/${projectId}`);
 }
 
+export async function deleteReferenceAssetAction(formData: FormData) {
+  const { profile } = await requireActiveProfile();
+  const assetId = String(formData.get("assetId"));
+
+  const asset = await deleteProjectReferenceAsset(assetId);
+
+  await db.project.update({
+    where: { id: asset.projectId },
+    data: {
+      lastActivityAt: new Date(),
+      latestTaskSummary: "参考图已删除",
+      latestTaskStatus: "SUCCEEDED"
+    }
+  });
+
+  await logActivity({
+    actorId: profile.id,
+    projectId: asset.projectId,
+    type: "UPLOAD_ASSET",
+    summary: `删除参考图 ${asset.fileName}`
+  });
+
+  revalidatePath(`/projects/${asset.projectId}`);
+}
+
 export async function createShotBatchAction(formData: FormData) {
   const env = getServerEnv();
   const { profile } = await requireActiveProfile();
@@ -96,7 +116,7 @@ export async function createShotBatchAction(formData: FormData) {
   });
 
   if (assetCount === 0) {
-    throw new Error("请先上传至少一张产品参考图，再开始生成分镜图。");
+    throw new Error("请先上传至少一张产品参考图，再开始生成分镜。");
   }
 
   const batch = await db.shotGenerationBatch.create({
@@ -122,7 +142,7 @@ export async function createShotBatchAction(formData: FormData) {
   await db.project.update({
     where: { id: parsed.data.projectId },
     data: {
-      latestTaskSummary: "分镜图生成中",
+      latestTaskSummary: "分镜生成中",
       latestTaskStatus: "QUEUED",
       lastActivityAt: new Date()
     }
@@ -132,66 +152,10 @@ export async function createShotBatchAction(formData: FormData) {
     actorId: profile.id,
     projectId: parsed.data.projectId,
     type: "START_BATCH",
-    summary: `提交分镜图生成（${parsed.data.targetCount} 张）`,
+    summary: `提交分镜生成（${parsed.data.targetCount} 张）`,
     metadata: {
       model: parsed.data.model
     }
-  });
-
-  revalidatePath(`/projects/${parsed.data.projectId}`);
-}
-
-export async function createStoryboardVersionAction(formData: FormData) {
-  const { profile } = await requireActiveProfile();
-  const candidateIds = formData.getAll("candidateIds").map(String);
-  const parsed = createStoryboardSchema.safeParse({
-    projectId: formData.get("projectId"),
-    name: formData.get("name"),
-    notes: formData.get("notes"),
-    candidateIds
-  });
-
-  if (!parsed.success) {
-    throw new Error(parsed.error.flatten().formErrors.join("\n"));
-  }
-
-  const candidates = await db.shotCandidate.findMany({
-    where: {
-      projectId: parsed.data.projectId,
-      id: {
-        in: parsed.data.candidateIds
-      }
-    },
-    orderBy: {
-      createdAt: "asc"
-    }
-  });
-
-  await db.storyboardVersion.create({
-    data: {
-      projectId: parsed.data.projectId,
-      createdById: profile.id,
-      name: parsed.data.name,
-      notes: parsed.data.notes || null,
-      status: "ACTIVE",
-      shots: {
-        create: candidates.map((candidate, index) => ({
-          sourceCandidateId: candidate.id,
-          orderIndex: index,
-          title: candidate.title,
-          prompt: candidate.prompt,
-          targetSeconds: 2,
-          description: null
-        }))
-      }
-    }
-  });
-
-  await logActivity({
-    actorId: profile.id,
-    projectId: parsed.data.projectId,
-    type: "CREATE_STORYBOARD",
-    summary: `创建分镜版本 ${parsed.data.name}`
   });
 
   revalidatePath(`/projects/${parsed.data.projectId}`);
@@ -310,7 +274,7 @@ export async function createVideoVersionAction(formData: FormData) {
     actorId: profile.id,
     projectId: parsed.data.projectId,
     type: "START_VIDEO",
-    summary: "提交视频版本生成",
+    summary: "提交视频生成",
     metadata: {
       model: parsed.data.model,
       rawSeconds: parsed.data.seconds ?? null

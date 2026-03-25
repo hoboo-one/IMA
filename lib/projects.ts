@@ -26,6 +26,9 @@ export async function getProjects(search?: string) {
 const workspaceInclude = {
   createdBy: true,
   assets: {
+    where: {
+      deletedAt: null
+    },
     orderBy: {
       sortOrder: "asc"
     }
