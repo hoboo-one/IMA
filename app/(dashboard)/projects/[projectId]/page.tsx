@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import {
   createShotBatchAction,
-  createVideoVersionAction,
+  createVideoVersionFromSelectionAction,
   deleteReferenceAssetAction,
   updateStoryboardShotAction,
   uploadReferenceAssetsAction
@@ -126,10 +126,14 @@ export default async function ProjectWorkspacePage({
       };
     }) ?? [];
 
-  const validStoryboardFrames = storyboardFrames.filter((item) => item.previewUrl || item.openHref);
+  const rawStoryboardFrames = storyboardFrames.filter((item) => item.previewUrl || item.openHref);
   const validLatestBatchFrames = latestBatchFrames.filter((item) => item.previewUrl || item.openHref);
-  const displayFrames = validStoryboardFrames.length > 0 ? validStoryboardFrames : validLatestBatchFrames;
-  const usingBatchFallback = validStoryboardFrames.length === 0 && validLatestBatchFrames.length > 0;
+  const validStoryboardFrames = rawStoryboardFrames.length > 0 ? rawStoryboardFrames : validLatestBatchFrames;
+  const displayFrames = validStoryboardFrames;
+  const usingBatchFallback = rawStoryboardFrames.length === 0 && validLatestBatchFrames.length > 0;
+  const videoSourceType = usingBatchFallback ? "BATCH" : "STORYBOARD";
+  const videoSourceId = usingBatchFallback ? latestBatch?.id ?? null : latestStoryboard?.id ?? null;
+  const videoSelectionFormId = "video-selection-form";
 
   const latestVideo = project.videos[0];
   const latestVideoMedia = latestVideo ? videoUrlById.get(latestVideo.id) : undefined;
@@ -268,6 +272,16 @@ export default async function ProjectWorkspacePage({
                         <strong>{frame.title || `分镜 ${index + 1}`}</strong>
                         <span>{frame.targetSeconds}s</span>
                       </div>
+                      <label className="smart-frame-selector">
+                        <input
+                          defaultChecked
+                          form={videoSelectionFormId}
+                          name="frameIds"
+                          type="checkbox"
+                          value={frame.id}
+                        />
+                        <span>用于视频</span>
+                      </label>
                       {frame.shot ? (
                         <details className="smart-shot-editor">
                           <summary>编辑这张分镜</summary>
@@ -352,16 +366,20 @@ export default async function ProjectWorkspacePage({
               <h3>生成视频</h3>
             </div>
           </div>
-          {latestStoryboard && validStoryboardFrames.length > 0 ? (
+          {videoSourceId ? (
             <div className="stack-form">
               <div className="smart-inline-note">
-                <strong>{latestStoryboard.name}</strong>
+                <strong>{usingBatchFallback ? "直接使用上方勾选分镜" : latestStoryboard?.name ?? "当前分镜"}</strong>
                 <span>{validStoryboardFrames.length} 张可用分镜图</span>
               </div>
+              <p className="field-hint">在上面的分镜卡片里勾选要用于视频的图像，然后再点下面按钮。</p>
               <VideoRunForm
-                action={createVideoVersionAction}
+                action={createVideoVersionFromSelectionAction}
+                formId={videoSelectionFormId}
+                frameCount={displayFrames.length}
                 projectId={project.id}
-                storyboardVersionId={latestStoryboard.id}
+                sourceId={videoSourceId}
+                sourceType={videoSourceType}
               />
             </div>
           ) : (

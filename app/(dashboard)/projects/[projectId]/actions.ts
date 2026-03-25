@@ -2,13 +2,188 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createBatchSchema, createVideoVersionSchema, updateStoryboardShotSchema } from "@/shared";
+import {
+  createBatchSchema,
+  createVideoVersionFromSelectionSchema,
+  createVideoVersionSchema,
+  updateStoryboardShotSchema
+} from "@/shared";
 import { logActivity } from "@/lib/activity";
 import { requireActiveProfile } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getServerEnv } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs";
 import { deleteProjectReferenceAsset, uploadProjectReferenceAsset } from "@/lib/storage";
+
+async function createQueuedVideoVersion(input: {
+  projectId: string;
+  storyboardVersionId: string;
+  createdById: string;
+  model: "VEO_3_1" | "VEO_3_1_FAST" | "VEO_3_1_LANDSCAPE" | "VEO_3_1_LANDSCAPE_FAST" | "SORA_2" | "SORA_2_PRO";
+  rawSeconds?: number;
+}) {
+  const env = getServerEnv();
+  const storyboard = await db.storyboardVersion.findUnique({
+    where: { id: input.storyboardVersionId },
+    include: {
+      shots: {
+        orderBy: { orderIndex: "asc" }
+      }
+    }
+  });
+
+  if (!storyboard) {
+    throw new Error("鍒嗛暅鐗堟湰涓嶅瓨鍦ㄣ€?");
+  }
+
+  const totalSeconds = storyboard.shots.reduce((sum, shot) => sum + shot.targetSeconds, 0);
+  const expiresAt = new Date(Date.now() + env.ASSET_RETENTION_HOURS * 60 * 60 * 1000);
+
+  const videoVersion = await db.videoVersion.create({
+    data: {
+      projectId: input.projectId,
+      storyboardVersionId: input.storyboardVersionId,
+      createdById: input.createdById,
+      model: input.model,
+      targetSeconds: totalSeconds,
+      expiresAt,
+      segments: {
+        create: storyboard.shots.map((shot) => ({
+          storyboardShotId: shot.id,
+          orderIndex: shot.orderIndex,
+          model: input.model,
+          targetSeconds: shot.targetSeconds,
+          prompt: shot.prompt,
+          expiresAt
+        }))
+      }
+    }
+  });
+
+  await enqueueJob({
+    kind: "GENERATE_VIDEO_VERSION",
+    projectId: input.projectId,
+    videoVersionId: videoVersion.id,
+    payload: {
+      videoVersionId: videoVersion.id,
+      soraRawSeconds: input.rawSeconds ?? null
+    }
+  });
+
+  await db.project.update({
+    where: { id: input.projectId },
+    data: {
+      latestTaskSummary: "瑙嗛鐢熸垚涓?",
+      latestTaskStatus: "QUEUED",
+      lastActivityAt: new Date()
+    }
+  });
+
+  return { storyboard, videoVersion };
+}
+
+async function createStoryboardFromVideoSelection(input: {
+  projectId: string;
+  createdById: string;
+  sourceType: "STORYBOARD" | "BATCH";
+  sourceId: string;
+  frameIds: string[];
+}) {
+  const nextIndex =
+    (await db.storyboardVersion.count({
+      where: {
+        projectId: input.projectId
+      }
+    })) + 1;
+
+  if (input.sourceType === "STORYBOARD") {
+    const sourceStoryboard = await db.storyboardVersion.findUnique({
+      where: { id: input.sourceId },
+      include: {
+        shots: {
+          orderBy: { orderIndex: "asc" }
+        }
+      }
+    });
+
+    if (!sourceStoryboard) {
+      throw new Error("鐩爣鍒嗛暅鐗堟湰涓嶅瓨鍦ㄣ€?");
+    }
+
+    const selectedShots = input.frameIds.map((frameId) => {
+      const shot = sourceStoryboard.shots.find((item) => item.id === frameId);
+
+      if (!shot) {
+        throw new Error("閫変腑鐨勫垎闀滃浘涓嶅湪褰撳墠鐗堟湰閲屻€?");
+      }
+
+      return shot;
+    });
+
+    return db.storyboardVersion.create({
+      data: {
+        projectId: input.projectId,
+        createdById: input.createdById,
+        name: `瑙嗛鍒嗛暅 ${nextIndex}`,
+        notes: `浠?${sourceStoryboard.name} 涓€夋嫨 ${selectedShots.length} 寮?`,
+        status: "ACTIVE",
+        shots: {
+          create: selectedShots.map((shot, index) => ({
+            sourceCandidateId: shot.sourceCandidateId,
+            orderIndex: index,
+            title: shot.title,
+            description: shot.description,
+            prompt: shot.prompt,
+            targetSeconds: shot.targetSeconds
+          }))
+        }
+      }
+    });
+  }
+
+  const sourceBatch = await db.shotGenerationBatch.findUnique({
+    where: { id: input.sourceId },
+    include: {
+      candidates: {
+        orderBy: { sortOrder: "asc" }
+      }
+    }
+  });
+
+  if (!sourceBatch) {
+    throw new Error("鐢熸垚杩欐壒鍒嗛暅鍥剧殑浠诲姟涓嶅瓨鍦ㄣ€?");
+  }
+
+  const selectedCandidates = input.frameIds.map((frameId) => {
+    const candidate = sourceBatch.candidates.find((item) => item.id === frameId);
+
+    if (!candidate) {
+      throw new Error("閫変腑鐨勫垎闀滃浘涓嶅湪褰撳墠鍙缁撴灉閲屻€?");
+    }
+
+    return candidate;
+  });
+
+  return db.storyboardVersion.create({
+    data: {
+      projectId: input.projectId,
+      createdById: input.createdById,
+      name: `瑙嗛鍒嗛暅 ${nextIndex}`,
+      notes: `浣跨敤鏈€鏂扮敓鎴愮殑 ${selectedCandidates.length} 寮犲垎闀滃浘`,
+      status: "ACTIVE",
+      shots: {
+        create: selectedCandidates.map((candidate, index) => ({
+          sourceCandidateId: candidate.id,
+          orderIndex: index,
+          title: candidate.title,
+          description: null,
+          prompt: candidate.prompt,
+          targetSeconds: 2
+        }))
+      }
+    }
+  });
+}
 
 export async function uploadReferenceAssetsAction(formData: FormData) {
   const { profile } = await requireActiveProfile();
@@ -278,6 +453,64 @@ export async function createVideoVersionAction(formData: FormData) {
     metadata: {
       model: parsed.data.model,
       rawSeconds: parsed.data.seconds ?? null
+    }
+  });
+
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+}
+
+export async function createVideoVersionFromSelectionAction(formData: FormData) {
+  const { profile } = await requireActiveProfile();
+  const parsed = createVideoVersionFromSelectionSchema.safeParse({
+    projectId: formData.get("projectId"),
+    sourceType: formData.get("sourceType"),
+    sourceId: formData.get("sourceId"),
+    frameIds: formData.getAll("frameIds"),
+    model: formData.get("model"),
+    seconds: formData.get("seconds")
+  });
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.flatten().formErrors.join("\n"));
+  }
+
+  const storyboard = await createStoryboardFromVideoSelection({
+    projectId: parsed.data.projectId,
+    createdById: profile.id,
+    sourceType: parsed.data.sourceType,
+    sourceId: parsed.data.sourceId,
+    frameIds: parsed.data.frameIds
+  });
+
+  await createQueuedVideoVersion({
+    projectId: parsed.data.projectId,
+    storyboardVersionId: storyboard.id,
+    createdById: profile.id,
+    model: parsed.data.model,
+    rawSeconds: parsed.data.seconds
+  });
+
+  await logActivity({
+    actorId: profile.id,
+    projectId: parsed.data.projectId,
+    type: "CREATE_STORYBOARD",
+    summary: "浣跨敤閫変腑鍒嗛暅鍥惧垱寤鸿棰戝垎闀?",
+    metadata: {
+      sourceType: parsed.data.sourceType,
+      sourceId: parsed.data.sourceId,
+      frameIds: parsed.data.frameIds
+    }
+  });
+
+  await logActivity({
+    actorId: profile.id,
+    projectId: parsed.data.projectId,
+    type: "START_VIDEO",
+    summary: "浣跨敤閫変腑鍒嗛暅鍥惧紑濮嬬敓鎴愯棰?",
+    metadata: {
+      model: parsed.data.model,
+      rawSeconds: parsed.data.seconds ?? null,
+      selectedFrameCount: parsed.data.frameIds.length
     }
   });
 

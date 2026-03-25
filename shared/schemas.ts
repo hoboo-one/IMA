@@ -59,6 +59,24 @@ export const createVideoVersionSchema = z.object({
   )
 });
 
+export const createVideoVersionFromSelectionSchema = z.object({
+  projectId: z.uuid(),
+  sourceType: z.enum(["STORYBOARD", "BATCH"]),
+  sourceId: z.uuid(),
+  frameIds: z.array(z.uuid()).min(1).max(12),
+  model: z.enum(videoModels),
+  seconds: z.preprocess(
+    (value) => (value === null || value === "" ? undefined : value),
+    z
+      .coerce.number()
+      .int()
+      .optional()
+      .refine((value) => value === undefined || soraSeconds.includes(value as (typeof soraSeconds)[number]), {
+        message: "Sora 2 鐩墠鍙敮鎸?10 绉掓垨 15 绉掋€?"
+      })
+  )
+});
+
 export const toggleMemberSchema = z.object({
   memberId: z.uuid(),
   isActive: z.boolean()

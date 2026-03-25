@@ -902,6 +902,23 @@ img {
   font-size: 0.82rem;
 }
 
+.smart-frame-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 16px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(137, 151, 175, 0.18);
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.smart-frame-selector input {
+  margin: 0;
+}
+
 .smart-upload-card {
   display: grid;
   align-items: stretch;
@@ -1083,6 +1100,13 @@ img {
 
 .field-hint {
   color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.field-error {
+  margin: 0;
+  color: #b3261e;
   font-size: 0.82rem;
   line-height: 1.5;
 }
