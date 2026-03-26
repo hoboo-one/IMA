@@ -116,7 +116,7 @@ export default async function ProjectWorkspacePage({ params, searchParams }: Pro
   const videoUrlById = new Map(videoUrls.map((item) => [item.id, item]));
 
   const productName = getReadableLabel(project.productName, "未命名产品");
-  const projectName = getReadableLabel(project.name, productName === "未命名产品" ? "未命名项目" : productName);
+  const workspaceTitle = getReadableLabel(project.productName, "创作台");
   const taskSummary = getTaskSummary(project.latestTaskSummary, project.latestTaskStatus);
   const hasReferenceAssets = project.assets.length > 0;
   const hasMaxReferenceAssets = project.assets.length >= 3;
@@ -218,7 +218,7 @@ export default async function ProjectWorkspacePage({ params, searchParams }: Pro
       <section className="creator-hero">
         <div>
           <p className="section-kicker">Creative Workspace</p>
-          <h2 className="creator-title">{projectName}</h2>
+          <h2 className="creator-title">{workspaceTitle}</h2>
           <p className="creator-subtitle">
             {project.notes?.trim()
               ? project.notes.trim()

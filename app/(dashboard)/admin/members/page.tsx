@@ -25,7 +25,7 @@ export default async function MembersPage() {
             <div className="card-grid">
               <label className="field">
                 <span>邮箱</span>
-                <input name="email" type="email" required />
+                <input name="email" required type="email" />
               </label>
               <label className="field">
                 <span>显示名称</span>
@@ -33,11 +33,11 @@ export default async function MembersPage() {
               </label>
               <label className="field">
                 <span>初始密码</span>
-                <input name="password" type="password" minLength={8} required />
+                <input minLength={8} name="password" required type="password" />
               </label>
               <label className="field">
                 <span>角色</span>
-                <select name="role" defaultValue="MEMBER">
+                <select defaultValue="MEMBER" name="role">
                   <option value="ADMIN">管理员</option>
                   <option value="MEMBER">成员</option>
                 </select>
@@ -59,9 +59,7 @@ export default async function MembersPage() {
                 <div className="panel-block">
                   <div className="inline-meta">
                     <strong>{member.displayName}</strong>
-                    <Badge tone={member.isActive ? "success" : "danger"}>
-                      {member.isActive ? "启用中" : "已停用"}
-                    </Badge>
+                    <Badge tone={member.isActive ? "success" : "danger"}>{member.isActive ? "启用中" : "已停用"}</Badge>
                     <Badge tone="neutral">{member.role === "ADMIN" ? "管理员" : "成员"}</Badge>
                   </div>
                   <span className="meta-text">
@@ -69,8 +67,8 @@ export default async function MembersPage() {
                   </span>
                 </div>
                 <form action={toggleMemberAction}>
-                  <input type="hidden" name="memberId" value={member.id} />
-                  <input type="hidden" name="isActive" value={String(!member.isActive)} />
+                  <input name="memberId" type="hidden" value={member.id} />
+                  <input name="isActive" type="hidden" value={String(!member.isActive)} />
                   <Button type="submit" variant={member.isActive ? "danger" : "ghost"}>
                     {member.isActive ? "停用" : "启用"}
                   </Button>

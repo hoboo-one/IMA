@@ -23,6 +23,31 @@ export async function getProjects(search?: string) {
   });
 }
 
+export async function getOrCreateWorkspaceProject(createdById: string) {
+  const existingProject = await db.project.findFirst({
+    where: {
+      status: "ACTIVE"
+    },
+    orderBy: {
+      updatedAt: "desc"
+    }
+  });
+
+  if (existingProject) {
+    return existingProject;
+  }
+
+  return db.project.create({
+    data: {
+      createdById,
+      latestTaskSummary: "创作台已准备好",
+      name: "默认创作台",
+      notes: "上传参考图后，直接开始生成分镜和视频。",
+      productName: "默认产品"
+    }
+  });
+}
+
 const workspaceInclude = {
   createdBy: true,
   assets: {

@@ -13,7 +13,7 @@ type AppShellProps = {
 };
 
 const navItems = [
-  { href: "/projects", label: "项目", hint: "Project Library" },
+  { href: "/projects", label: "创作台", hint: "Studio" },
   { href: "/admin/members", label: "成员", hint: "People" }
 ];
 

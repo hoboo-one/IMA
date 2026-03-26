@@ -24,8 +24,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <div className="page-header">
           <div>
             <p className="eyebrow">Shared Team Workspace</p>
-            <h2 className="page-title">产品分镜与视频工作台</h2>
-            <p className="page-subtitle">把参考图、分镜版本和视频结果放在同一套团队工作流里，减少来回切换。</p>
+            <h2 className="page-title">成员管理</h2>
+            <p className="page-subtitle">这里仅保留团队成员管理。创作相关操作都在创作台里完成。</p>
           </div>
           <form action={signOutAction}>
             <Button type="submit" variant="ghost">

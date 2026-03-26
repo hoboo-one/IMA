@@ -11,8 +11,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 export async function createMemberAction(formData: FormData) {
   const { profile } = await requireAdminProfile();
   const parsed = createMemberSchema.safeParse({
-    email: formData.get("email"),
     displayName: formData.get("displayName"),
+    email: formData.get("email"),
     password: formData.get("password"),
     role: formData.get("role")
   });
@@ -24,8 +24,8 @@ export async function createMemberAction(formData: FormData) {
   const supabase = createSupabaseAdminClient();
   const authResult = await supabase.auth.admin.createUser({
     email: parsed.data.email,
-    password: parsed.data.password,
-    email_confirm: true
+    email_confirm: true,
+    password: parsed.data.password
   });
 
   if (authResult.error || !authResult.data.user) {
@@ -34,20 +34,20 @@ export async function createMemberAction(formData: FormData) {
 
   await db.userProfile.create({
     data: {
-      id: authResult.data.user.id,
-      email: parsed.data.email,
       displayName: parsed.data.displayName,
+      email: parsed.data.email,
+      id: authResult.data.user.id,
       role: parsed.data.role
     }
   });
 
   await logActivity({
     actorId: profile.id,
-    type: "CREATE_MEMBER",
-    summary: `创建成员 ${parsed.data.displayName}`,
     metadata: {
       role: parsed.data.role
-    }
+    },
+    summary: `创建成员 ${parsed.data.displayName}`,
+    type: "CREATE_MEMBER"
   });
 
   revalidatePath("/admin/members");
@@ -56,8 +56,8 @@ export async function createMemberAction(formData: FormData) {
 export async function toggleMemberAction(formData: FormData) {
   const { profile } = await requireAdminProfile();
   const parsed = toggleMemberSchema.safeParse({
-    memberId: formData.get("memberId"),
-    isActive: formData.get("isActive") === "true"
+    isActive: formData.get("isActive") === "true",
+    memberId: formData.get("memberId")
   });
 
   if (!parsed.success) {
@@ -71,8 +71,8 @@ export async function toggleMemberAction(formData: FormData) {
 
   await logActivity({
     actorId: profile.id,
-    type: "TOGGLE_MEMBER",
-    summary: `${parsed.data.isActive ? "启用" : "停用"}成员 ${member.displayName}`
+    summary: `${parsed.data.isActive ? "启用" : "停用"}成员 ${member.displayName}`,
+    type: "TOGGLE_MEMBER"
   });
 
   revalidatePath("/admin/members");
