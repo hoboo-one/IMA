@@ -29,8 +29,8 @@ function buildSuggestedPrompt(input: {
   return [
     `请基于参考产品图，为“${input.productName}”生成一组适合后续视频生成的产品分镜图。`,
     noteLine,
-    "镜头要求：包含主体展示、细节特写、结构材质表现和一张更有氛围感的产品展示图。",
-    "风格要求：高级感、电商产品视觉、背景简洁、光线干净、构图差异清晰。"
+    "镜头要求：包含主体展示、细节特写、结构材质表现，以及一张更有氛围感的产品展示图。",
+    "风格要求：高级感、电商产品视觉、背景简洁、光线干净、构图有明显差异。"
   ].join("\n");
 }
 
@@ -48,7 +48,7 @@ export function StoryboardGeneratorForm({
       <input type="hidden" name="projectId" value={projectId} />
 
       <div className="inline-meta">
-        <span className="field-hint">系统可以先帮你起一版提示词，你再按需要微调。</span>
+        <span className="field-hint">可以先用推荐提示词，再按你的想法微调。</span>
         <button
           type="button"
           className="button button-ghost"
@@ -64,7 +64,7 @@ export function StoryboardGeneratorForm({
           name="prompt"
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder="描述你希望这组分镜图呈现的镜头感、材质和氛围。"
+          placeholder="描述你想要这组分镜图呈现的镜头感、材质和氛围。"
           required
         />
       </label>
@@ -93,8 +93,8 @@ export function StoryboardGeneratorForm({
         </label>
       </div>
 
-      <SubmitButton type="submit" pendingText="生成分镜中...">
-        生成分镜图
+      <SubmitButton type="submit" pendingText="正在生成分镜...">
+        生成分镜
       </SubmitButton>
     </form>
   );

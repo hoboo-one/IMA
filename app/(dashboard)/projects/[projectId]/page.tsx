@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
@@ -15,8 +16,13 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { StoryboardGeneratorForm } from "@/components/workspace/storyboard-generator-form";
 import { VideoRunForm } from "@/components/workspace/video-run-form";
 import { getProjectWorkspace } from "@/lib/projects";
-import { bytesToLabel, formatDateTime } from "@/lib/utils";
+import { bytesToLabel, cn, formatDateTime } from "@/lib/utils";
 import { videoModelLabels } from "@/shared";
+
+type ProjectWorkspacePageProps = {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ storyboard?: string }>;
+};
 
 function PreviewImage({
   alt,
@@ -40,6 +46,14 @@ function PreviewImage({
   );
 }
 
+function looksBrokenText(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return /�|锟|鈥|\?{2,}/.test(value);
+}
+
 function getReadableLabel(value: string | null | undefined, fallback: string) {
   if (!value) {
     return fallback;
@@ -47,11 +61,29 @@ function getReadableLabel(value: string | null | undefined, fallback: string) {
 
   const normalized = value.trim();
 
-  if (!normalized || /\?{2,}|�/u.test(normalized)) {
+  if (!normalized || looksBrokenText(normalized)) {
     return fallback;
   }
 
   return normalized;
+}
+
+function getTaskSummary(summary: string | null | undefined, status: string | null | undefined) {
+  if (summary && !looksBrokenText(summary)) {
+    return summary;
+  }
+
+  switch (status) {
+    case "FAILED":
+      return "最近一次任务失败";
+    case "RUNNING":
+    case "QUEUED":
+      return "任务处理中";
+    case "SUCCEEDED":
+      return "已准备就绪";
+    default:
+      return "等待开始";
+  }
 }
 
 function EmptyState({
@@ -69,12 +101,9 @@ function EmptyState({
   );
 }
 
-export default async function ProjectWorkspacePage({
-  params
-}: {
-  params: Promise<{ projectId: string }>;
-}) {
+export default async function ProjectWorkspacePage({ params, searchParams }: ProjectWorkspacePageProps) {
   const { projectId } = await params;
+  const resolvedSearchParams = await searchParams;
   const workspace = await getProjectWorkspace(projectId);
 
   if (!workspace) {
@@ -86,388 +115,448 @@ export default async function ProjectWorkspacePage({
   const candidateUrlById = new Map(candidateUrls.map((item) => [item.id, item]));
   const videoUrlById = new Map(videoUrls.map((item) => [item.id, item]));
 
-  const displayProductName = getReadableLabel(project.productName, "未命名产品");
-  const displayProjectName = getReadableLabel(project.name, displayProductName);
+  const productName = getReadableLabel(project.productName, "未命名产品");
+  const projectName = getReadableLabel(project.name, productName === "未命名产品" ? "未命名项目" : productName);
+  const taskSummary = getTaskSummary(project.latestTaskSummary, project.latestTaskStatus);
   const hasReferenceAssets = project.assets.length > 0;
   const hasMaxReferenceAssets = project.assets.length >= 3;
   const hasRunningJobs = project.jobs.length > 0;
   const statusTone = project.latestTaskStatus === "FAILED" ? "danger" : hasRunningJobs ? "warning" : "neutral";
 
-  const latestStoryboard = project.storyboards[0];
   const latestBatch = project.batches[0];
+  const latestBatchFrames =
+    latestBatch?.candidates.map((candidate, index) => {
+      const media = candidateUrlById.get(candidate.id);
+      const label = getReadableLabel(candidate.title, `分镜 ${index + 1}`);
 
-  const storyboardFrames =
-    latestStoryboard?.shots.map((shot, index) => {
+      return {
+        id: candidate.id,
+        description: null,
+        isEditable: false,
+        isExpired: !media?.previewUrl && !media?.url,
+        openHref: media?.url ?? media?.previewUrl ?? null,
+        orderIndex: candidate.sortOrder,
+        previewUrl: media?.previewUrl ?? null,
+        prompt: candidate.prompt,
+        shotId: null,
+        targetSeconds: 2,
+        title: label
+      };
+    }) ?? [];
+
+  const latestBatchSelectableFrames = latestBatchFrames.filter((frame) => !frame.isExpired);
+
+  const storyboardEntries = project.storyboards.map((storyboard, storyboardIndex) => {
+    const displayName = getReadableLabel(storyboard.name, `分镜版本 ${project.storyboards.length - storyboardIndex}`);
+    const frames = storyboard.shots.map((shot, frameIndex) => {
       const media = shot.sourceCandidateId ? candidateUrlById.get(shot.sourceCandidateId) : undefined;
 
       return {
         id: shot.id,
-        title: shot.title || `分镜 ${index + 1}`,
-        targetSeconds: shot.targetSeconds,
+        description: shot.description,
+        isEditable: true,
+        isExpired: !media?.previewUrl && !media?.url,
+        openHref: media?.url ?? media?.previewUrl ?? null,
+        orderIndex: shot.orderIndex,
+        previewUrl: media?.previewUrl ?? null,
         prompt: shot.prompt,
-        shot,
-        openHref: media?.url ?? media?.previewUrl ?? null,
-        previewUrl: media?.previewUrl ?? null
+        shotId: shot.id,
+        targetSeconds: shot.targetSeconds,
+        title: getReadableLabel(shot.title, `分镜 ${frameIndex + 1}`)
       };
-    }) ?? [];
+    });
 
-  const latestBatchFrames =
-    latestBatch?.candidates.map((candidate, index) => {
-      const media = candidateUrlById.get(candidate.id);
+    const selectableFrames = frames.filter((frame) => !frame.isExpired);
 
-      return {
-        id: candidate.id,
-        title: candidate.title || `分镜 ${index + 1}`,
-        targetSeconds: 2,
-        prompt: candidate.prompt,
-        shot: null,
-        openHref: media?.url ?? media?.previewUrl ?? null,
-        previewUrl: media?.previewUrl ?? null
-      };
-    }) ?? [];
+    return {
+      coverHref: selectableFrames[0]?.previewUrl ?? selectableFrames[0]?.openHref ?? null,
+      displayName,
+      frames,
+      isExpired: selectableFrames.length === 0,
+      selectableFrames,
+      storyboard
+    };
+  });
 
-  const rawStoryboardFrames = storyboardFrames.filter((item) => item.previewUrl || item.openHref);
-  const validLatestBatchFrames = latestBatchFrames.filter((item) => item.previewUrl || item.openHref);
-  const validStoryboardFrames = rawStoryboardFrames.length > 0 ? rawStoryboardFrames : validLatestBatchFrames;
-  const displayFrames = validStoryboardFrames;
-  const usingBatchFallback = rawStoryboardFrames.length === 0 && validLatestBatchFrames.length > 0;
-  const videoSourceType = usingBatchFallback ? "BATCH" : "STORYBOARD";
-  const videoSourceId = usingBatchFallback ? latestBatch?.id ?? null : latestStoryboard?.id ?? null;
+  const requestedStoryboardId =
+    typeof resolvedSearchParams.storyboard === "string" && resolvedSearchParams.storyboard.length > 0
+      ? resolvedSearchParams.storyboard
+      : null;
+
+  const selectedStoryboardEntry =
+    (requestedStoryboardId
+      ? storyboardEntries.find((entry) => entry.storyboard.id === requestedStoryboardId)
+      : undefined) ?? storyboardEntries[0];
+
+  const useBatchFallback =
+    !requestedStoryboardId &&
+    (!selectedStoryboardEntry || selectedStoryboardEntry.selectableFrames.length === 0) &&
+    latestBatchSelectableFrames.length > 0;
+
+  const currentFrames = useBatchFallback ? latestBatchFrames : selectedStoryboardEntry?.frames ?? [];
+  const selectableFrames = useBatchFallback
+    ? latestBatchSelectableFrames
+    : selectedStoryboardEntry?.selectableFrames ?? [];
+  const currentSourceType = useBatchFallback ? "BATCH" : selectedStoryboardEntry ? "STORYBOARD" : null;
+  const currentSourceId = useBatchFallback ? latestBatch?.id ?? null : selectedStoryboardEntry?.storyboard.id ?? null;
+  const currentStoryboardLabel = useBatchFallback
+    ? "最新生成分镜"
+    : selectedStoryboardEntry?.displayName ?? "当前分镜";
   const videoSelectionFormId = "video-selection-form";
 
-  const latestVideo = project.videos[0];
-  const latestVideoMedia = latestVideo ? videoUrlById.get(latestVideo.id) : undefined;
   const visibleVideos = project.videos
     .map((video) => ({
-      video,
-      media: videoUrlById.get(video.id)
+      media: videoUrlById.get(video.id),
+      video
     }))
     .filter((entry) => entry.video.status !== "READY" || entry.media?.previewUrl || entry.media?.downloadHref);
-  const expiredVideoCount = project.videos.length - visibleVideos.length;
 
   return (
-    <div className="smart-workspace">
+    <div className="creator-page">
       <TaskAutoRefresh enabled={hasRunningJobs} />
 
-      <section className="smart-header-card">
+      <section className="creator-hero">
         <div>
-          <p className="section-kicker">Creative Studio</p>
-          <h2 className="smart-title">{displayProjectName}</h2>
-          <p className="smart-subtitle">
-            {displayProductName} · 参考图和分镜图都放在一个面板里，生成后可以直接查看和编辑。
+          <p className="section-kicker">Creative Workspace</p>
+          <h2 className="creator-title">{projectName}</h2>
+          <p className="creator-subtitle">
+            {project.notes?.trim()
+              ? project.notes.trim()
+              : "上传参考图，生成分镜，再从分镜里直接勾选图像生成视频。"}
           </p>
         </div>
-        <div className="smart-header-meta">
-          <Badge tone={statusTone}>{project.latestTaskSummary ?? "等待开始"}</Badge>
+        <div className="creator-hero-meta">
+          <Badge tone={statusTone}>{taskSummary}</Badge>
           <span className="meta-text">最近更新：{formatDateTime(project.updatedAt)}</span>
         </div>
       </section>
 
-      <section className="smart-board">
-        <div className="smart-board-header">
-          <div>
-            <p className="section-kicker">Creation Board</p>
-            <h3>创作面板</h3>
-          </div>
-          <div className="smart-board-meta">
-            <span>{project.assets.length}/3 张参考图</span>
-            <span>{displayFrames.length} 张分镜图</span>
-          </div>
-        </div>
-
-        <div className="smart-board-grid">
-          <section className="smart-lane">
-            <div className="smart-lane-header">
+      <div className="creator-grid">
+        <aside className="creator-sidebar">
+          <section className="creator-panel">
+            <div className="creator-section-head">
               <div>
-                <h4>参考图</h4>
-                <p>上传后可以直接删除或替换，也可以点击查看大图。</p>
+                <p className="section-kicker">Reference</p>
+                <h3>参考图</h3>
               </div>
+              <span className="meta-text">{project.assets.length}/3 张</span>
             </div>
 
-            <div className="smart-media-grid">
-              {project.assets.map((asset) => {
-                const media = assetUrlById.get(asset.id);
-                const href = media?.originalUrl ?? media?.previewUrl ?? null;
+            {project.assets.length > 0 ? (
+              <div className="creator-reference-grid">
+                {project.assets.map((asset) => {
+                  const media = assetUrlById.get(asset.id);
+                  const href = media?.originalUrl ?? media?.previewUrl ?? null;
 
-                return (
-                  <article key={asset.id} className="smart-media-card">
-                    <div className="smart-media-visual">
-                      {href ? (
-                        <a href={href} target="_blank" rel="noreferrer" className="smart-visual-link">
-                          <PreviewImage alt={asset.fileName} src={media?.previewUrl ?? href} />
-                        </a>
-                      ) : (
-                        <div className="media-placeholder" />
-                      )}
-                      <form action={deleteReferenceAssetAction} className="smart-media-delete">
-                        <input type="hidden" name="assetId" value={asset.id} />
-                        <SubmitButton type="submit" variant="danger" pendingText="删除中...">
-                          删除
-                        </SubmitButton>
-                      </form>
-                    </div>
-                    <div className="smart-media-copy">
-                      <strong>{asset.fileName}</strong>
-                      <span>{bytesToLabel(asset.byteSize)}</span>
-                    </div>
-                  </article>
-                );
-              })}
+                  return (
+                    <article key={asset.id} className="creator-reference-card">
+                      <div className="creator-card-visual">
+                        {href ? (
+                          <a href={href} target="_blank" rel="noreferrer" className="smart-visual-link">
+                            <PreviewImage alt={asset.fileName} src={media?.previewUrl ?? href} />
+                          </a>
+                        ) : (
+                          <div className="creator-card-placeholder">图片预览已过期</div>
+                        )}
+                        <form action={deleteReferenceAssetAction} className="creator-card-delete">
+                          <input type="hidden" name="assetId" value={asset.id} />
+                          <SubmitButton type="submit" variant="danger" pendingText="删除中...">
+                            删除
+                          </SubmitButton>
+                        </form>
+                      </div>
+                      <div className="creator-card-copy">
+                        <strong>{asset.fileName}</strong>
+                        <span>{bytesToLabel(asset.byteSize)}</span>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState title="还没有参考图" description="先上传 1 到 3 张参考图，再开始生成分镜。" />
+            )}
 
-              {!hasMaxReferenceAssets ? (
-                <article className="smart-upload-card">
-                  <form action={uploadReferenceAssetsAction} className="stack-form smart-upload-form" encType="multipart/form-data">
-                    <input type="hidden" name="projectId" value={project.id} />
-                    <label className="field">
-                      <span>继续上传参考图</span>
-                      <input name="files" type="file" accept="image/*" multiple required={!hasReferenceAssets} />
-                    </label>
-                    <SubmitButton type="submit" pendingText="上传中...">
-                      上传参考图
-                    </SubmitButton>
-                  </form>
-                </article>
-              ) : null}
-            </div>
+            {!hasMaxReferenceAssets ? (
+              <form action={uploadReferenceAssetsAction} className="stack-form creator-upload-form" encType="multipart/form-data">
+                <input type="hidden" name="projectId" value={project.id} />
+                <label className="field">
+                  <span>继续上传参考图</span>
+                  <input name="files" type="file" accept="image/*" multiple required={!hasReferenceAssets} />
+                </label>
+                <SubmitButton type="submit" pendingText="上传中...">
+                  上传参考图
+                </SubmitButton>
+              </form>
+            ) : null}
           </section>
 
-          <section className="smart-lane">
-            <div className="smart-lane-header">
+          <section className="creator-panel">
+            <div className="creator-section-head">
               <div>
-                <h4>分镜图</h4>
-                <p>生成后会直接显示在这里，并且支持点击预览。</p>
+                <p className="section-kicker">Generate</p>
+                <h3>生成分镜</h3>
               </div>
             </div>
+            {hasReferenceAssets ? (
+              <StoryboardGeneratorForm
+                action={createShotBatchAction}
+                notes={project.notes}
+                productName={productName}
+                projectId={project.id}
+              />
+            ) : (
+              <EmptyState title="先上传参考图" description="没有参考图时，系统不会开始生成分镜。" />
+            )}
+          </section>
+        </aside>
 
-            {displayFrames.length > 0 ? (
-              <>
-                {usingBatchFallback ? (
-                  <div className="smart-inline-note">
-                    <strong>这批是最新生成的分镜图</strong>
-                    <span>旧分镜的预览已经过期，所以这里优先展示你最新一批可用的结果。</span>
-                  </div>
-                ) : null}
+        <section className="creator-main">
+          <section className="creator-panel">
+            <div className="creator-section-head">
+              <div>
+                <p className="section-kicker">Storyboard History</p>
+                <h3>历史分镜</h3>
+              </div>
+              <span className="meta-text">{project.storyboards.length} 个版本</span>
+            </div>
 
-                <div className="smart-storyboard-grid">
-                  {displayFrames.map((frame, index) => (
-                    <article key={frame.id} className="smart-shot-card">
-                      <div className="smart-shot-visual">
+            {storyboardEntries.length > 0 ? (
+              <div className="creator-history-strip">
+                {storyboardEntries.map((entry) => {
+                  const isCurrent = !useBatchFallback && selectedStoryboardEntry?.storyboard.id === entry.storyboard.id;
+
+                  return (
+                    <Link
+                      key={entry.storyboard.id}
+                      href={`/projects/${project.id}?storyboard=${entry.storyboard.id}`}
+                      className={cn("creator-history-card", isCurrent && "creator-history-card-current")}
+                    >
+                      <div className="creator-history-cover">
+                        {entry.coverHref ? (
+                          <PreviewImage alt={entry.displayName} src={entry.coverHref} />
+                        ) : (
+                          <div className="creator-card-placeholder">预览已过期</div>
+                        )}
+                      </div>
+                      <div className="creator-history-copy">
+                        <strong>{entry.displayName}</strong>
+                        <span>{entry.frames.length} 张分镜</span>
+                        <span>{formatDateTime(entry.storyboard.createdAt)}</span>
+                        <Badge tone={entry.isExpired ? "warning" : isCurrent ? "success" : "neutral"}>
+                          {entry.isExpired ? "已过期" : isCurrent ? "当前使用" : "可切换"}
+                        </Badge>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState title="还没有历史分镜" description="每次生成分镜后，这里都会自动保留一个版本，方便你以后再切回来做视频。" />
+            )}
+          </section>
+
+          <section className="creator-panel">
+            <div className="creator-section-head">
+              <div>
+                <p className="section-kicker">Storyboard</p>
+                <h3>{currentStoryboardLabel}</h3>
+              </div>
+              <span className="meta-text">{selectableFrames.length} 张可用于视频</span>
+            </div>
+
+            {useBatchFallback ? (
+              <div className="smart-inline-note">
+                <strong>当前展示的是最新生成结果</strong>
+                <span>旧分镜预览已过期，所以这里优先显示你最新一批可用的分镜图。</span>
+              </div>
+            ) : null}
+
+            {currentFrames.length > 0 ? (
+              <div className="creator-frame-grid">
+                {currentFrames.map((frame, index) => {
+                  const isSelectable = !frame.isExpired && Boolean(currentSourceId);
+
+                  return (
+                    <article key={frame.id} className="creator-frame-card">
+                      <div className="creator-card-visual">
                         {frame.openHref ? (
                           <a href={frame.openHref} target="_blank" rel="noreferrer" className="smart-visual-link">
                             {frame.previewUrl ? (
                               <PreviewImage alt={frame.title} src={frame.previewUrl} />
                             ) : (
-                              <div className="smart-expired-preview">
-                                <span>点击查看原图</span>
-                              </div>
+                              <div className="creator-card-placeholder">点击查看原图</div>
                             )}
                           </a>
                         ) : (
-                          <div className="smart-expired-preview">
-                            <span>这张分镜已经过期，请重新生成</span>
-                          </div>
+                          <div className="creator-card-placeholder">这张分镜已过期，请重新生成</div>
                         )}
                       </div>
-                      <div className="smart-shot-summary">
-                        <strong>{frame.title || `分镜 ${index + 1}`}</strong>
-                        <span>{frame.targetSeconds}s</span>
+                      <div className="creator-card-copy">
+                        <div className="creator-frame-topline">
+                          <strong>{frame.title || `分镜 ${index + 1}`}</strong>
+                          <span>{frame.targetSeconds}s</span>
+                        </div>
+                        <label className={cn("creator-frame-check", !isSelectable && "creator-frame-check-disabled")}>
+                          <input
+                            defaultChecked={isSelectable}
+                            disabled={!isSelectable}
+                            form={videoSelectionFormId}
+                            name="frameIds"
+                            type="checkbox"
+                            value={frame.id}
+                          />
+                          <span>{isSelectable ? "用于视频" : "已过期，无法用于视频"}</span>
+                        </label>
                       </div>
-                      <label className="smart-frame-selector">
-                        <input
-                          defaultChecked
-                          form={videoSelectionFormId}
-                          name="frameIds"
-                          type="checkbox"
-                          value={frame.id}
-                        />
-                        <span>用于视频</span>
-                      </label>
-                      {frame.shot ? (
-                        <details className="smart-shot-editor">
-                          <summary>编辑这张分镜</summary>
+
+                      {frame.isEditable && frame.shotId ? (
+                        <details className="creator-frame-editor">
+                          <summary>编辑镜头</summary>
                           <form action={updateStoryboardShotAction} className="stack-form">
-                            <input type="hidden" name="shotId" value={frame.shot.id} />
-                            <div className="smart-shot-fields">
+                            <input type="hidden" name="shotId" value={frame.shotId} />
+                            <div className="creator-edit-grid">
                               <label className="field">
                                 <span>标题</span>
-                                <input name="title" defaultValue={frame.shot.title} />
+                                <input defaultValue={frame.title} name="title" />
                               </label>
                               <label className="field">
                                 <span>排序</span>
-                                <input name="orderIndex" type="number" min={0} defaultValue={frame.shot.orderIndex} />
+                                <input defaultValue={frame.orderIndex} min={0} name="orderIndex" type="number" />
                               </label>
                               <label className="field">
                                 <span>时长</span>
-                                <input name="targetSeconds" type="number" min={1} max={15} defaultValue={frame.shot.targetSeconds} />
+                                <input defaultValue={frame.targetSeconds} max={15} min={1} name="targetSeconds" type="number" />
                               </label>
                             </div>
                             <label className="field">
                               <span>说明</span>
-                              <input name="description" defaultValue={frame.shot.description ?? ""} />
+                              <input defaultValue={frame.description ?? ""} name="description" />
                             </label>
                             <label className="field">
                               <span>提示词</span>
-                              <textarea name="prompt" defaultValue={frame.shot.prompt} />
+                              <textarea defaultValue={frame.prompt} name="prompt" />
                             </label>
                             <SubmitButton type="submit" variant="ghost" pendingText="保存中...">
                               保存修改
                             </SubmitButton>
                           </form>
                         </details>
-                      ) : (
-                        <div className="smart-inline-note">
-                          <strong>可查看</strong>
-                          <span>这批图已经生成成功，但还没挂到正式分镜版本里。</span>
-                        </div>
-                      )}
+                      ) : null}
                     </article>
-                  ))}
-                </div>
-              </>
+                  );
+                })}
+              </div>
             ) : hasRunningJobs ? (
-              <EmptyState
-                title="分镜生成中"
-                description="系统正在根据参考图生成分镜图，完成后会直接出现在这里。"
-              />
+              <EmptyState title="分镜生成中" description="系统正在处理参考图，完成后分镜会直接出现在这里。" />
             ) : (
               <EmptyState
-                title="还没有分镜图"
-                description="先上传参考图，然后点击下方的“生成分镜图”。"
+                title={selectedStoryboardEntry ? "这个历史分镜已过期" : "还没有分镜"}
+                description={
+                  selectedStoryboardEntry
+                    ? "这个版本的图像已经过期了。你可以切换别的历史分镜，或者重新生成新的分镜。"
+                    : "先上传参考图并生成分镜，生成后这里会直接展示。"
+                }
               />
             )}
           </section>
-        </div>
-      </section>
 
-      <div className="smart-controls-grid">
-        <section className="smart-control-card">
-          <div className="smart-control-header">
-            <div>
-              <p className="section-kicker">AI Generate</p>
-              <h3>生成分镜图</h3>
-            </div>
-          </div>
-          {hasReferenceAssets ? (
-            <StoryboardGeneratorForm
-              action={createShotBatchAction}
-              notes={project.notes}
-              productName={displayProductName}
-              projectId={project.id}
-            />
-          ) : (
-            <EmptyState title="先上传参考图" description="没有参考图时，系统不会开始生成分镜。" />
-          )}
-        </section>
-
-        <section className="smart-control-card">
-          <div className="smart-control-header">
-            <div>
-              <p className="section-kicker">Video Output</p>
-              <h3>生成视频</h3>
-            </div>
-          </div>
-          {videoSourceId ? (
-            <div className="stack-form">
-              <div className="smart-inline-note">
-                <strong>{usingBatchFallback ? "直接使用上方勾选分镜" : latestStoryboard?.name ?? "当前分镜"}</strong>
-                <span>{validStoryboardFrames.length} 张可用分镜图</span>
+          <div className="creator-actions-grid">
+            <section className="creator-panel">
+              <div className="creator-section-head">
+                <div>
+                  <p className="section-kicker">Video</p>
+                  <h3>生成视频</h3>
+                </div>
               </div>
-              <p className="field-hint">在上面的分镜卡片里勾选要用于视频的图像，然后再点下面按钮。</p>
-              <VideoRunForm
-                action={createVideoVersionFromSelectionAction}
-                formId={videoSelectionFormId}
-                frameCount={displayFrames.length}
-                projectId={project.id}
-                sourceId={videoSourceId}
-                sourceType={videoSourceType}
-              />
-            </div>
-          ) : (
-            <EmptyState title="先生成新的分镜图" description="有一版可用分镜后，这里才会出现视频生成入口。" />
-          )}
+
+              {currentSourceId && selectableFrames.length > 0 ? (
+                <>
+                  <p className="field-hint">直接在上面的分镜卡片里勾选要用于视频的图像，然后从这里开始生成。</p>
+                  <VideoRunForm
+                    action={createVideoVersionFromSelectionAction}
+                    formId={videoSelectionFormId}
+                    frameCount={selectableFrames.length}
+                    projectId={project.id}
+                    sourceId={currentSourceId}
+                    sourceType={currentSourceType ?? "STORYBOARD"}
+                  />
+                </>
+              ) : (
+                <EmptyState
+                  title="当前没有可用于视频的分镜"
+                  description="先切换到一个可用的历史分镜，或者重新生成一版新的分镜。"
+                />
+              )}
+            </section>
+
+            <section className="creator-panel">
+              <div className="creator-section-head">
+                <div>
+                  <p className="section-kicker">Video Results</p>
+                  <h3>视频结果</h3>
+                </div>
+                <span className="meta-text">仅显示未过期结果</span>
+              </div>
+
+              {visibleVideos.length > 0 ? (
+                <div className="creator-video-list">
+                  {visibleVideos.map(({ media, video }) => (
+                    <article key={video.id} className="creator-video-card">
+                      <div className="creator-video-visual">
+                        {media?.downloadHref ? (
+                          <a href={media.downloadHref} target="_blank" rel="noreferrer" className="smart-visual-link">
+                            {media.previewUrl ? (
+                              <PreviewImage alt={video.id} className="video-preview" src={media.previewUrl} />
+                            ) : (
+                              <div className="creator-card-placeholder">点击下载视频</div>
+                            )}
+                          </a>
+                        ) : media?.previewUrl ? (
+                          <PreviewImage alt={video.id} className="video-preview" src={media.previewUrl} />
+                        ) : (
+                          <div className="creator-card-placeholder">视频结果已过期</div>
+                        )}
+                      </div>
+                      <div className="creator-card-copy">
+                        <div className="creator-frame-topline">
+                          <strong>{videoModelLabels[video.model]}</strong>
+                          <Badge
+                            tone={
+                              video.status === "FAILED"
+                                ? "danger"
+                                : video.status === "READY"
+                                  ? "success"
+                                  : "warning"
+                            }
+                          >
+                            {video.status}
+                          </Badge>
+                        </div>
+                        <span>{getReadableLabel(video.storyboardVersion.name, "分镜版本")}</span>
+                        <span>
+                          {video.targetSeconds ?? 0}s · {formatDateTime(video.createdAt)}
+                        </span>
+                        {media?.downloadHref ? (
+                          <a className="button button-primary" href={media.downloadHref} rel="noreferrer" target="_blank">
+                            下载视频
+                          </a>
+                        ) : (
+                          <Button type="button" variant="ghost" disabled>
+                            已过期
+                          </Button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="还没有可用视频" description="视频生成完成后，未过期的结果会显示在这里。" />
+              )}
+            </section>
+          </div>
         </section>
       </div>
-
-      <section className="smart-video-board">
-        <div className="smart-board-header">
-          <div>
-            <p className="section-kicker">Latest Videos</p>
-            <h3>视频结果</h3>
-          </div>
-          {expiredVideoCount > 0 ? <span className="meta-text">{expiredVideoCount} 个旧视频结果已过期隐藏</span> : null}
-        </div>
-
-        {visibleVideos.length > 0 ? (
-          <div className="smart-video-grid">
-            {visibleVideos.map(({ media, video }) => (
-              <article key={video.id} className="smart-video-card">
-                <div className="smart-video-visual">
-                  {media?.downloadHref ? (
-                    <a href={media.downloadHref} target="_blank" rel="noreferrer" className="smart-visual-link">
-                      {media.previewUrl ? (
-                        <PreviewImage alt={video.id} className="video-preview" src={media.previewUrl} />
-                      ) : (
-                        <div className="smart-expired-preview">
-                          <span>点击下载视频</span>
-                        </div>
-                      )}
-                    </a>
-                  ) : media?.previewUrl ? (
-                    <PreviewImage alt={video.id} className="video-preview" src={media.previewUrl} />
-                  ) : (
-                    <div className="smart-expired-preview">
-                      <span>视频结果已过期</span>
-                    </div>
-                  )}
-                </div>
-                <div className="smart-video-copy">
-                  <div className="inline-meta">
-                    <strong>{videoModelLabels[video.model]}</strong>
-                    <Badge
-                      tone={
-                        video.status === "FAILED"
-                          ? "danger"
-                          : video.status === "READY"
-                            ? "success"
-                            : "warning"
-                      }
-                    >
-                      {video.status}
-                    </Badge>
-                  </div>
-                  <span>{video.storyboardVersion.name}</span>
-                  <span>
-                    {video.targetSeconds ?? 0}s · {formatDateTime(video.createdAt)}
-                  </span>
-                  {media?.downloadHref ? (
-                    <a className="button button-primary" href={media.downloadHref} target="_blank" rel="noreferrer">
-                      下载视频
-                    </a>
-                  ) : (
-                    <Button type="button" variant="ghost" disabled>
-                      已过期
-                    </Button>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="还没有可用视频" description="旧视频结果过期后会自动隐藏，生成新视频后会显示在这里。" />
-        )}
-
-        {latestVideoMedia?.previewUrl ? (
-          <div className="smart-video-highlight">
-            <div className="smart-video-highlight-poster">
-              <PreviewImage alt={latestVideo?.id ?? "最新视频"} className="video-preview" src={latestVideoMedia.previewUrl} />
-            </div>
-            <div className="smart-video-highlight-copy">
-              <strong>最新视频</strong>
-              <span>{latestVideo ? videoModelLabels[latestVideo.model] : "视频"}</span>
-            </div>
-          </div>
-        ) : null}
-      </section>
     </div>
   );
 }

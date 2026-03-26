@@ -1111,6 +1111,254 @@ img {
   line-height: 1.5;
 }
 
+.creator-page {
+  display: grid;
+  gap: 18px;
+}
+
+.creator-hero,
+.creator-panel {
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.creator-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 22px 24px;
+}
+
+.creator-title {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 2rem;
+  letter-spacing: -0.03em;
+}
+
+.creator-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 760px;
+}
+
+.creator-hero-meta {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.creator-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 18px;
+}
+
+.creator-sidebar,
+.creator-main,
+.creator-actions-grid,
+.creator-reference-grid,
+.creator-frame-grid,
+.creator-video-list {
+  display: grid;
+  gap: 18px;
+}
+
+.creator-history-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 220px);
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.creator-panel {
+  padding: 18px;
+}
+
+.creator-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.creator-section-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.creator-reference-grid,
+.creator-frame-grid,
+.creator-video-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.creator-card-visual,
+.creator-history-cover,
+.creator-video-visual {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(234, 239, 247, 0.84), rgba(220, 226, 238, 0.76));
+}
+
+.creator-card-visual img,
+.creator-history-cover img,
+.creator-video-visual img {
+  width: 100%;
+  height: 240px;
+  object-fit: cover;
+}
+
+.creator-history-cover img {
+  height: 120px;
+}
+
+.creator-reference-card,
+.creator-frame-card,
+.creator-video-card,
+.creator-history-card {
+  border: 1px solid rgba(137, 151, 175, 0.16);
+  border-radius: 22px;
+  background: rgba(247, 249, 253, 0.9);
+  overflow: hidden;
+}
+
+.creator-history-card {
+  display: grid;
+  gap: 0;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.creator-history-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.25);
+  box-shadow: 0 10px 22px rgba(29, 39, 61, 0.06);
+}
+
+.creator-history-card-current {
+  border-color: rgba(37, 99, 235, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.creator-card-copy,
+.creator-history-copy {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px 16px;
+}
+
+.creator-card-copy span,
+.creator-history-copy span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.creator-card-delete {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.creator-card-delete .button {
+  min-height: 36px;
+  padding-inline: 12px;
+}
+
+.creator-card-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  padding: 18px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.creator-upload-form {
+  margin-top: 12px;
+}
+
+.creator-frame-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.creator-frame-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.creator-frame-check-disabled {
+  color: var(--muted);
+}
+
+.creator-frame-check input {
+  margin: 0;
+}
+
+.creator-frame-editor {
+  padding: 0 16px 16px;
+}
+
+.creator-frame-editor summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  list-style: none;
+  margin-bottom: 12px;
+}
+
+.creator-frame-editor summary::-webkit-details-marker {
+  display: none;
+}
+
+.creator-edit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 92px;
+  gap: 12px;
+}
+
+@media (max-width: 1180px) {
+  .creator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .creator-actions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .creator-hero {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .creator-hero-meta {
+    justify-items: start;
+  }
+
+  .creator-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .stage-tab-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

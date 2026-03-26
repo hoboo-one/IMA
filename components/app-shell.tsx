@@ -8,8 +8,8 @@ type AppShellProps = {
   children: ReactNode;
   compact?: boolean;
   currentPath: string;
-  userName: string;
   roleLabel: string;
+  userName: string;
 };
 
 const navItems = [
@@ -17,7 +17,7 @@ const navItems = [
   { href: "/admin/members", label: "成员", hint: "People" }
 ];
 
-export function AppShell({ children, compact = false, currentPath, userName, roleLabel }: AppShellProps) {
+export function AppShell({ children, compact = false, currentPath, roleLabel, userName }: AppShellProps) {
   return (
     <div className={cn("shell", compact && "shell-compact")}>
       <aside className={cn("sidebar", compact && "sidebar-compact")}>
@@ -30,7 +30,7 @@ export function AppShell({ children, compact = false, currentPath, userName, rol
           <div>
             <p className="eyebrow">Internal Studio</p>
             <h1>Product Storyboard</h1>
-            {!compact ? <p className="sidebar-copy">多图参考、分镜挑选、视频拼接的一体化工作台。</p> : null}
+            {!compact ? <p className="sidebar-copy">上传参考图、生成分镜、再把分镜做成视频，全部收在一个工作台里。</p> : null}
           </div>
         </div>
 

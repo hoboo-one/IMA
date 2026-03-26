@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatDateTime(value: Date | string | null | undefined) {
   if (!value) {
-    return "—";
+    return "未记录";
   }
 
   const date = typeof value === "string" ? new Date(value) : value;
@@ -26,7 +26,7 @@ export function slugifyFileName(name: string) {
 
 export function bytesToLabel(value: number | null | undefined) {
   if (!value) {
-    return "—";
+    return "未记录";
   }
 
   const units = ["B", "KB", "MB", "GB"];

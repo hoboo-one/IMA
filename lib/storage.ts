@@ -6,8 +6,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { slugifyFileName } from "@/lib/utils";
 
 export async function uploadProjectReferenceAsset(input: {
-  projectId: string;
   file: File;
+  projectId: string;
   sortOrder: number;
 }) {
   const env = getServerEnv();
@@ -32,6 +32,7 @@ export async function uploadProjectReferenceAsset(input: {
       .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
       .webp({ quality: 82 })
       .toBuffer();
+
     previewPath = `${input.projectId}/preview/${Date.now()}-${safeName}.webp`;
 
     const previewUpload = await admin.storage.from(env.STORAGE_BUCKET_RAW).upload(previewPath, previewBuffer, {
@@ -48,15 +49,15 @@ export async function uploadProjectReferenceAsset(input: {
 
   return db.projectAsset.create({
     data: {
-      projectId: input.projectId,
-      origin: "ORIGINAL",
-      storagePath: originalPath,
-      previewPath,
-      mimeType: input.file.type || "application/octet-stream",
       byteSize: input.file.size,
+      expiresAt: new Date(Date.now() + env.ASSET_RETENTION_HOURS * 60 * 60 * 1000),
       fileName: input.file.name,
+      mimeType: input.file.type || "application/octet-stream",
+      origin: "ORIGINAL",
+      previewPath,
+      projectId: input.projectId,
       sortOrder: input.sortOrder,
-      expiresAt: new Date(Date.now() + env.ASSET_RETENTION_HOURS * 60 * 60 * 1000)
+      storagePath: originalPath
     }
   });
 }
@@ -74,8 +75,10 @@ export async function deleteProjectReferenceAsset(assetId: string) {
   }
 
   const paths = [asset.storagePath, asset.previewPath].filter(Boolean) as string[];
+
   if (paths.length > 0) {
     const { error } = await admin.storage.from(env.STORAGE_BUCKET_RAW).remove(paths);
+
     if (error) {
       throw new Error(error.message);
     }
@@ -91,8 +94,8 @@ export async function deleteProjectReferenceAsset(assetId: string) {
 
     const remainingAssets = await tx.projectAsset.findMany({
       where: {
-        projectId: asset.projectId,
-        deletedAt: null
+        deletedAt: null,
+        projectId: asset.projectId
       },
       orderBy: {
         sortOrder: "asc"

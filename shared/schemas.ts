@@ -43,11 +43,8 @@ export const updateStoryboardShotSchema = z.object({
   orderIndex: z.coerce.number().int().min(0).max(30)
 });
 
-export const createVideoVersionSchema = z.object({
-  projectId: z.uuid(),
-  storyboardVersionId: z.uuid(),
-  model: z.enum(videoModels),
-  seconds: z.preprocess(
+function buildSoraSecondsSchema() {
+  return z.preprocess(
     (value) => (value === null || value === "" ? undefined : value),
     z
       .coerce.number()
@@ -56,7 +53,14 @@ export const createVideoVersionSchema = z.object({
       .refine((value) => value === undefined || soraSeconds.includes(value as (typeof soraSeconds)[number]), {
         message: "Sora 2 目前只支持 10 秒或 15 秒。"
       })
-  )
+  );
+}
+
+export const createVideoVersionSchema = z.object({
+  projectId: z.uuid(),
+  storyboardVersionId: z.uuid(),
+  model: z.enum(videoModels),
+  seconds: buildSoraSecondsSchema()
 });
 
 export const createVideoVersionFromSelectionSchema = z.object({
@@ -65,16 +69,7 @@ export const createVideoVersionFromSelectionSchema = z.object({
   sourceId: z.uuid(),
   frameIds: z.array(z.uuid()).min(1).max(12),
   model: z.enum(videoModels),
-  seconds: z.preprocess(
-    (value) => (value === null || value === "" ? undefined : value),
-    z
-      .coerce.number()
-      .int()
-      .optional()
-      .refine((value) => value === undefined || soraSeconds.includes(value as (typeof soraSeconds)[number]), {
-        message: "Sora 2 鐩墠鍙敮鎸?10 绉掓垨 15 绉掋€?"
-      })
-  )
+  seconds: buildSoraSecondsSchema()
 });
 
 export const toggleMemberSchema = z.object({

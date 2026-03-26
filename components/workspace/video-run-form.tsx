@@ -27,10 +27,10 @@ export function VideoRunForm({
   const supportsSeconds = modelSupportsSeconds(model);
   const selectionLabel = useMemo(() => {
     if (sourceType === "BATCH") {
-      return "直接使用上方勾选的分镜图生成视频";
+      return "当前显示的是最新分镜结果";
     }
 
-    return "从当前分镜里勾选要用于视频的图像";
+    return "当前显示的是你选中的分镜版本";
   }, [sourceType]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -53,7 +53,7 @@ export function VideoRunForm({
 
       <div className="smart-inline-note">
         <strong>{selectionLabel}</strong>
-        <span>默认全选，当前最多可从上方 {frameCount} 张分镜图里自由勾选后直接生成视频。</span>
+        <span>上方分镜默认全选。你可以取消不想参与的视频镜头，当前最多可选 {frameCount} 张。</span>
       </div>
 
       <label className="field">
@@ -69,7 +69,7 @@ export function VideoRunForm({
 
       {supportsSeconds ? (
         <label className="field">
-          <span>Sora 原始生成时长</span>
+          <span>Sora 原始时长</span>
           <select name="seconds" defaultValue={String(soraSeconds[0])}>
             {soraSeconds.map((seconds) => (
               <option key={seconds} value={seconds}>

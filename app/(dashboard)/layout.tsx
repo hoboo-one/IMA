@@ -17,15 +17,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <AppShell
       compact={isProjectWorkspace}
       currentPath={currentPath}
-      userName={profile.displayName}
       roleLabel={profile.role === "ADMIN" ? "管理员" : "成员"}
+      userName={profile.displayName}
     >
       {isProjectWorkspace ? null : (
         <div className="page-header">
           <div>
             <p className="eyebrow">Shared Team Workspace</p>
             <h2 className="page-title">产品分镜与视频工作台</h2>
-            <p className="page-subtitle">把参考图、候选镜头、正式分镜和视频版本整理在一个连续的团队工作区里。</p>
+            <p className="page-subtitle">把参考图、分镜版本和视频结果放在同一套团队工作流里，减少来回切换。</p>
           </div>
           <form action={signOutAction}>
             <Button type="submit" variant="ghost">

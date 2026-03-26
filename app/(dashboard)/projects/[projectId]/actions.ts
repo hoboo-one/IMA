@@ -15,12 +15,20 @@ import { getServerEnv } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs";
 import { deleteProjectReferenceAsset, uploadProjectReferenceAsset } from "@/lib/storage";
 
+type VideoModelInput =
+  | "VEO_3_1"
+  | "VEO_3_1_FAST"
+  | "VEO_3_1_LANDSCAPE"
+  | "VEO_3_1_LANDSCAPE_FAST"
+  | "SORA_2"
+  | "SORA_2_PRO";
+
 async function createQueuedVideoVersion(input: {
-  projectId: string;
-  storyboardVersionId: string;
   createdById: string;
-  model: "VEO_3_1" | "VEO_3_1_FAST" | "VEO_3_1_LANDSCAPE" | "VEO_3_1_LANDSCAPE_FAST" | "SORA_2" | "SORA_2_PRO";
+  model: VideoModelInput;
+  projectId: string;
   rawSeconds?: number;
+  storyboardVersionId: string;
 }) {
   const env = getServerEnv();
   const storyboard = await db.storyboardVersion.findUnique({
@@ -33,7 +41,7 @@ async function createQueuedVideoVersion(input: {
   });
 
   if (!storyboard) {
-    throw new Error("鍒嗛暅鐗堟湰涓嶅瓨鍦ㄣ€?");
+    throw new Error("没有找到要生成视频的分镜版本。");
   }
 
   const totalSeconds = storyboard.shots.reduce((sum, shot) => sum + shot.targetSeconds, 0);
@@ -65,17 +73,17 @@ async function createQueuedVideoVersion(input: {
     projectId: input.projectId,
     videoVersionId: videoVersion.id,
     payload: {
-      videoVersionId: videoVersion.id,
-      soraRawSeconds: input.rawSeconds ?? null
+      soraRawSeconds: input.rawSeconds ?? null,
+      videoVersionId: videoVersion.id
     }
   });
 
   await db.project.update({
     where: { id: input.projectId },
     data: {
-      latestTaskSummary: "瑙嗛鐢熸垚涓?",
+      lastActivityAt: new Date(),
       latestTaskStatus: "QUEUED",
-      lastActivityAt: new Date()
+      latestTaskSummary: "正在生成视频"
     }
   });
 
@@ -83,11 +91,11 @@ async function createQueuedVideoVersion(input: {
 }
 
 async function createStoryboardFromVideoSelection(input: {
-  projectId: string;
   createdById: string;
-  sourceType: "STORYBOARD" | "BATCH";
-  sourceId: string;
   frameIds: string[];
+  projectId: string;
+  sourceId: string;
+  sourceType: "STORYBOARD" | "BATCH";
 }) {
   const nextIndex =
     (await db.storyboardVersion.count({
@@ -107,14 +115,14 @@ async function createStoryboardFromVideoSelection(input: {
     });
 
     if (!sourceStoryboard) {
-      throw new Error("鐩爣鍒嗛暅鐗堟湰涓嶅瓨鍦ㄣ€?");
+      throw new Error("没有找到你选中的分镜版本。");
     }
 
     const selectedShots = input.frameIds.map((frameId) => {
       const shot = sourceStoryboard.shots.find((item) => item.id === frameId);
 
       if (!shot) {
-        throw new Error("閫変腑鐨勫垎闀滃浘涓嶅湪褰撳墠鐗堟湰閲屻€?");
+        throw new Error("你勾选的分镜图不在当前版本里，请刷新页面后重试。");
       }
 
       return shot;
@@ -124,8 +132,8 @@ async function createStoryboardFromVideoSelection(input: {
       data: {
         projectId: input.projectId,
         createdById: input.createdById,
-        name: `瑙嗛鍒嗛暅 ${nextIndex}`,
-        notes: `浠?${sourceStoryboard.name} 涓€夋嫨 ${selectedShots.length} 寮?`,
+        name: `视频分镜 ${nextIndex}`,
+        notes: `从 ${sourceStoryboard.name} 里选中了 ${selectedShots.length} 张分镜图`,
         status: "ACTIVE",
         shots: {
           create: selectedShots.map((shot, index) => ({
@@ -151,14 +159,14 @@ async function createStoryboardFromVideoSelection(input: {
   });
 
   if (!sourceBatch) {
-    throw new Error("鐢熸垚杩欐壒鍒嗛暅鍥剧殑浠诲姟涓嶅瓨鍦ㄣ€?");
+    throw new Error("没有找到这一批分镜结果，请重新生成后再试。");
   }
 
   const selectedCandidates = input.frameIds.map((frameId) => {
     const candidate = sourceBatch.candidates.find((item) => item.id === frameId);
 
     if (!candidate) {
-      throw new Error("閫変腑鐨勫垎闀滃浘涓嶅湪褰撳墠鍙缁撴灉閲屻€?");
+      throw new Error("你勾选的分镜图不在当前可见结果里，请刷新页面后重试。");
     }
 
     return candidate;
@@ -168,8 +176,8 @@ async function createStoryboardFromVideoSelection(input: {
     data: {
       projectId: input.projectId,
       createdById: input.createdById,
-      name: `瑙嗛鍒嗛暅 ${nextIndex}`,
-      notes: `浣跨敤鏈€鏂扮敓鎴愮殑 ${selectedCandidates.length} 寮犲垎闀滃浘`,
+      name: `视频分镜 ${nextIndex}`,
+      notes: `使用最新生成结果中的 ${selectedCandidates.length} 张分镜图`,
       status: "ACTIVE",
       shots: {
         create: selectedCandidates.map((candidate, index) => ({
@@ -193,7 +201,7 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
     .filter((value): value is File => value instanceof File && value.size > 0);
 
   if (files.length === 0) {
-    throw new Error("请先选择至少一张参考图。");
+    throw new Error("请至少选择 1 张参考图。");
   }
 
   const project = await db.project.findUnique({
@@ -206,7 +214,7 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
   }
 
   if (project.assets.length + files.length > 3) {
-    throw new Error("参考图总数最多只能上传 3 张。");
+    throw new Error("参考图最多只能保留 3 张。");
   }
 
   for (const [index, file] of files.entries()) {
@@ -215,12 +223,12 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
     }
 
     if (file.size > 20 * 1024 * 1024) {
-      throw new Error("单张图片大小不能超过 20MB。");
+      throw new Error("单张图片不能超过 20MB。");
     }
 
     await uploadProjectReferenceAsset({
-      projectId,
       file,
+      projectId,
       sortOrder: project.assets.length + index
     });
   }
@@ -229,16 +237,16 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
     where: { id: projectId },
     data: {
       lastActivityAt: new Date(),
-      latestTaskSummary: "参考图已更新",
-      latestTaskStatus: "SUCCEEDED"
+      latestTaskStatus: "SUCCEEDED",
+      latestTaskSummary: "参考图已更新"
     }
   });
 
   await logActivity({
     actorId: profile.id,
     projectId,
-    type: "UPLOAD_ASSET",
-    summary: `上传 ${files.length} 张参考图`
+    summary: `上传了 ${files.length} 张参考图`,
+    type: "UPLOAD_ASSET"
   });
 
   revalidatePath(`/projects/${projectId}`);
@@ -247,23 +255,22 @@ export async function uploadReferenceAssetsAction(formData: FormData) {
 export async function deleteReferenceAssetAction(formData: FormData) {
   const { profile } = await requireActiveProfile();
   const assetId = String(formData.get("assetId"));
-
   const asset = await deleteProjectReferenceAsset(assetId);
 
   await db.project.update({
     where: { id: asset.projectId },
     data: {
       lastActivityAt: new Date(),
-      latestTaskSummary: "参考图已删除",
-      latestTaskStatus: "SUCCEEDED"
+      latestTaskStatus: "SUCCEEDED",
+      latestTaskSummary: "参考图已删除"
     }
   });
 
   await logActivity({
     actorId: profile.id,
     projectId: asset.projectId,
-    type: "UPLOAD_ASSET",
-    summary: `删除参考图 ${asset.fileName}`
+    summary: `删除了参考图 ${asset.fileName}`,
+    type: "UPLOAD_ASSET"
   });
 
   revalidatePath(`/projects/${asset.projectId}`);
@@ -273,10 +280,10 @@ export async function createShotBatchAction(formData: FormData) {
   const env = getServerEnv();
   const { profile } = await requireActiveProfile();
   const parsed = createBatchSchema.safeParse({
+    model: formData.get("model"),
     projectId: formData.get("projectId"),
     prompt: formData.get("prompt"),
-    targetCount: formData.get("targetCount"),
-    model: formData.get("model")
+    targetCount: formData.get("targetCount")
   });
 
   if (!parsed.success) {
@@ -285,23 +292,23 @@ export async function createShotBatchAction(formData: FormData) {
 
   const assetCount = await db.projectAsset.count({
     where: {
-      projectId: parsed.data.projectId,
-      deletedAt: null
+      deletedAt: null,
+      projectId: parsed.data.projectId
     }
   });
 
   if (assetCount === 0) {
-    throw new Error("请先上传至少一张产品参考图，再开始生成分镜。");
+    throw new Error("请先上传至少 1 张参考图，再开始生成分镜。");
   }
 
   const batch = await db.shotGenerationBatch.create({
     data: {
-      projectId: parsed.data.projectId,
       createdById: profile.id,
-      prompt: parsed.data.prompt,
-      targetCount: parsed.data.targetCount,
+      expiresAt: new Date(Date.now() + env.ASSET_RETENTION_HOURS * 60 * 60 * 1000),
       model: parsed.data.model,
-      expiresAt: new Date(Date.now() + env.ASSET_RETENTION_HOURS * 60 * 60 * 1000)
+      projectId: parsed.data.projectId,
+      prompt: parsed.data.prompt,
+      targetCount: parsed.data.targetCount
     }
   });
 
@@ -317,20 +324,20 @@ export async function createShotBatchAction(formData: FormData) {
   await db.project.update({
     where: { id: parsed.data.projectId },
     data: {
-      latestTaskSummary: "分镜生成中",
+      lastActivityAt: new Date(),
       latestTaskStatus: "QUEUED",
-      lastActivityAt: new Date()
+      latestTaskSummary: "正在生成分镜"
     }
   });
 
   await logActivity({
     actorId: profile.id,
-    projectId: parsed.data.projectId,
-    type: "START_BATCH",
-    summary: `提交分镜生成（${parsed.data.targetCount} 张）`,
     metadata: {
       model: parsed.data.model
-    }
+    },
+    projectId: parsed.data.projectId,
+    summary: `提交了 ${parsed.data.targetCount} 张分镜生成任务`,
+    type: "START_BATCH"
   });
 
   revalidatePath(`/projects/${parsed.data.projectId}`);
@@ -339,12 +346,12 @@ export async function createShotBatchAction(formData: FormData) {
 export async function updateStoryboardShotAction(formData: FormData) {
   const { profile } = await requireActiveProfile();
   const parsed = updateStoryboardShotSchema.safeParse({
-    shotId: formData.get("shotId"),
-    title: formData.get("title"),
     description: formData.get("description"),
+    orderIndex: formData.get("orderIndex"),
     prompt: formData.get("prompt"),
+    shotId: formData.get("shotId"),
     targetSeconds: formData.get("targetSeconds"),
-    orderIndex: formData.get("orderIndex")
+    title: formData.get("title")
   });
 
   if (!parsed.success) {
@@ -354,11 +361,11 @@ export async function updateStoryboardShotAction(formData: FormData) {
   const shot = await db.storyboardShot.update({
     where: { id: parsed.data.shotId },
     data: {
-      title: parsed.data.title,
       description: parsed.data.description || null,
+      orderIndex: parsed.data.orderIndex,
       prompt: parsed.data.prompt,
       targetSeconds: parsed.data.targetSeconds,
-      orderIndex: parsed.data.orderIndex
+      title: parsed.data.title
     },
     include: {
       storyboardVersion: true
@@ -368,92 +375,43 @@ export async function updateStoryboardShotAction(formData: FormData) {
   await logActivity({
     actorId: profile.id,
     projectId: shot.storyboardVersion.projectId,
-    type: "UPDATE_STORYBOARD",
-    summary: `更新分镜镜头 ${parsed.data.title}`
+    summary: `更新了镜头 ${parsed.data.title}`,
+    type: "UPDATE_STORYBOARD"
   });
 
   revalidatePath(`/projects/${shot.storyboardVersion.projectId}`);
 }
 
 export async function createVideoVersionAction(formData: FormData) {
-  const env = getServerEnv();
   const { profile } = await requireActiveProfile();
   const parsed = createVideoVersionSchema.safeParse({
-    projectId: formData.get("projectId"),
-    storyboardVersionId: formData.get("storyboardVersionId"),
     model: formData.get("model"),
-    seconds: formData.get("seconds")
+    projectId: formData.get("projectId"),
+    seconds: formData.get("seconds"),
+    storyboardVersionId: formData.get("storyboardVersionId")
   });
 
   if (!parsed.success) {
     throw new Error(parsed.error.flatten().formErrors.join("\n"));
   }
 
-  const storyboard = await db.storyboardVersion.findUnique({
-    where: { id: parsed.data.storyboardVersionId },
-    include: {
-      shots: {
-        orderBy: { orderIndex: "asc" }
-      }
-    }
-  });
-
-  if (!storyboard) {
-    throw new Error("分镜版本不存在。");
-  }
-
-  const totalSeconds = storyboard.shots.reduce((sum, shot) => sum + shot.targetSeconds, 0);
-  const expiresAt = new Date(Date.now() + env.ASSET_RETENTION_HOURS * 60 * 60 * 1000);
-
-  const videoVersion = await db.videoVersion.create({
-    data: {
-      projectId: parsed.data.projectId,
-      storyboardVersionId: parsed.data.storyboardVersionId,
-      createdById: profile.id,
-      model: parsed.data.model,
-      targetSeconds: totalSeconds,
-      expiresAt,
-      segments: {
-        create: storyboard.shots.map((shot) => ({
-          storyboardShotId: shot.id,
-          orderIndex: shot.orderIndex,
-          model: parsed.data.model,
-          targetSeconds: shot.targetSeconds,
-          prompt: shot.prompt,
-          expiresAt
-        }))
-      }
-    }
-  });
-
-  await enqueueJob({
-    kind: "GENERATE_VIDEO_VERSION",
+  await createQueuedVideoVersion({
+    createdById: profile.id,
+    model: parsed.data.model,
     projectId: parsed.data.projectId,
-    videoVersionId: videoVersion.id,
-    payload: {
-      videoVersionId: videoVersion.id,
-      soraRawSeconds: parsed.data.seconds ?? null
-    }
-  });
-
-  await db.project.update({
-    where: { id: parsed.data.projectId },
-    data: {
-      latestTaskSummary: "视频生成中",
-      latestTaskStatus: "QUEUED",
-      lastActivityAt: new Date()
-    }
+    rawSeconds: parsed.data.seconds,
+    storyboardVersionId: parsed.data.storyboardVersionId
   });
 
   await logActivity({
     actorId: profile.id,
-    projectId: parsed.data.projectId,
-    type: "START_VIDEO",
-    summary: "提交视频生成",
     metadata: {
       model: parsed.data.model,
       rawSeconds: parsed.data.seconds ?? null
-    }
+    },
+    projectId: parsed.data.projectId,
+    summary: "提交了视频生成任务",
+    type: "START_VIDEO"
   });
 
   revalidatePath(`/projects/${parsed.data.projectId}`);
@@ -462,12 +420,12 @@ export async function createVideoVersionAction(formData: FormData) {
 export async function createVideoVersionFromSelectionAction(formData: FormData) {
   const { profile } = await requireActiveProfile();
   const parsed = createVideoVersionFromSelectionSchema.safeParse({
-    projectId: formData.get("projectId"),
-    sourceType: formData.get("sourceType"),
-    sourceId: formData.get("sourceId"),
     frameIds: formData.getAll("frameIds"),
     model: formData.get("model"),
-    seconds: formData.get("seconds")
+    projectId: formData.get("projectId"),
+    seconds: formData.get("seconds"),
+    sourceId: formData.get("sourceId"),
+    sourceType: formData.get("sourceType")
   });
 
   if (!parsed.success) {
@@ -475,43 +433,43 @@ export async function createVideoVersionFromSelectionAction(formData: FormData) 
   }
 
   const storyboard = await createStoryboardFromVideoSelection({
-    projectId: parsed.data.projectId,
     createdById: profile.id,
-    sourceType: parsed.data.sourceType,
+    frameIds: parsed.data.frameIds,
+    projectId: parsed.data.projectId,
     sourceId: parsed.data.sourceId,
-    frameIds: parsed.data.frameIds
+    sourceType: parsed.data.sourceType
   });
 
   await createQueuedVideoVersion({
-    projectId: parsed.data.projectId,
-    storyboardVersionId: storyboard.id,
     createdById: profile.id,
     model: parsed.data.model,
-    rawSeconds: parsed.data.seconds
+    projectId: parsed.data.projectId,
+    rawSeconds: parsed.data.seconds,
+    storyboardVersionId: storyboard.id
   });
 
   await logActivity({
     actorId: profile.id,
-    projectId: parsed.data.projectId,
-    type: "CREATE_STORYBOARD",
-    summary: "浣跨敤閫変腑鍒嗛暅鍥惧垱寤鸿棰戝垎闀?",
     metadata: {
-      sourceType: parsed.data.sourceType,
+      frameIds: parsed.data.frameIds,
       sourceId: parsed.data.sourceId,
-      frameIds: parsed.data.frameIds
-    }
+      sourceType: parsed.data.sourceType
+    },
+    projectId: parsed.data.projectId,
+    summary: `从当前分镜里勾选了 ${parsed.data.frameIds.length} 张图用于视频`,
+    type: "CREATE_STORYBOARD"
   });
 
   await logActivity({
     actorId: profile.id,
-    projectId: parsed.data.projectId,
-    type: "START_VIDEO",
-    summary: "浣跨敤閫変腑鍒嗛暅鍥惧紑濮嬬敓鎴愯棰?",
     metadata: {
       model: parsed.data.model,
       rawSeconds: parsed.data.seconds ?? null,
       selectedFrameCount: parsed.data.frameIds.length
-    }
+    },
+    projectId: parsed.data.projectId,
+    summary: "开始使用勾选分镜生成视频",
+    type: "START_VIDEO"
   });
 
   revalidatePath(`/projects/${parsed.data.projectId}`);
